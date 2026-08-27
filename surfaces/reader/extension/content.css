@@ -140,3 +140,12 @@ html.moguru-off .moguru-legend {
   border-top: 1px dashed #2a3340;
   white-space: pre-wrap;
 }
+
+/* engine-offline badge — the annotation flow dies silently without it */
+#moguru-badge {
+  position: fixed; bottom: 14px; right: 14px; z-index: 2147483646;
+  background: #1f2937; color: #fecaca; font: 12px/1.4 system-ui, sans-serif;
+  padding: 8px 12px; border-radius: 8px;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, .35);
+  pointer-events: none;
+}

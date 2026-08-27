@@ -45,6 +45,19 @@ function send(msg) {
   return new Promise((resolve) => chrome.runtime.sendMessage(msg, resolve));
 }
 
+// The one failure mode that looks like "the extension does nothing": engine
+// down. A small fixed badge makes the state visible instead of silent.
+function showOfflineBadge() {
+  if (document.getElementById("moguru-badge")) return;
+  const b = document.createElement("div");
+  b.id = "moguru-badge";
+  b.textContent = "潜る — engine offline · cd ~/Moguru && uv run moguru serve";
+  document.body.appendChild(b);
+}
+function hideOfflineBadge() {
+  document.getElementById("moguru-badge")?.remove();
+}
+
 let flushTimer = null;
 function queueBlock(block) {
   pending.add(block);
@@ -92,7 +105,11 @@ async function annotateBlock(block) {
   let plan = cache.get(key);
   if (!plan) {
     const resp = await send({ type: "moguru:annotate", text });
-    if (!resp || !resp.ok) return; // engine down — leave page clean
+    if (!resp || !resp.ok) {
+      showOfflineBadge(); // engine down — visible, not silent
+      return;
+    }
+    hideOfflineBadge();
     if (resp.version && resp.version !== knownVersion) {
       knownVersion = resp.version;
       cache.clear();

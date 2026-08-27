@@ -252,8 +252,9 @@ async def ask(request: Request) -> JSONResponse:
     grounding = _ask_grounding(question, config())
     system = (
         "あなたは日本語学習支援アシスタントです。与えられた辞書情報だけを根拠に、"
-        "日本語で簡潔に答えてください。読み方・意味・アクセントを箇条書きで示し、"
-        "推論は短くしてください。"
+        "簡潔に答えてください。読み方・意味・アクセントを箇条書きで示し、各項目に"
+        "短い英語の説明 (short English gloss) を添えてください — the learner reads "
+        "Japanese but wants an English gloss for each item. 推論は短く。"
     )
     user = f"文脈: {context}\n質問: {question}" if context else question
     if grounding:
