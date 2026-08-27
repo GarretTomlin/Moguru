@@ -136,7 +136,15 @@ def test_validate_live_ollama(temp_config):
     provider = pm.Provider(
         id="live", endpoint="http://localhost:11434/v1", model=models[0],
     )
-    report = pm.validate_provider(provider)
+    # live runtimes stutter when the GPU is shared (LM Studio holding two
+    # models) — one retry keeps this from flaking under contention
+    for attempt in range(2):
+        try:
+            report = pm.validate_provider(provider)
+            break
+        except pm.ProviderError:
+            if attempt:
+                raise
     assert report["ok"] and report["local"] and report["latency_ms"] > 0
 
 
