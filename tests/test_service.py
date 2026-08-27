@@ -127,7 +127,7 @@ def test_ask_no_tools_local_grounding(client, monkeypatch):
         def __init__(self, cfg):
             pass
 
-        def chat(self, messages, tools=None, max_tokens=None):
+        def chat(self, messages, tools=None, max_tokens=None, extra_body=None):
             calls.append({"messages": messages, "tools": tools,
                           "max_tokens": max_tokens})
             return {"choices": [{"message": {"content": "構造 — こうぞう"}}]}
@@ -143,7 +143,7 @@ def test_ask_no_tools_local_grounding(client, monkeypatch):
     assert "構造" in data["answer"]
     assert len(calls) == 1
     assert calls[0]["tools"] is None       # no ~40-tool schema payload
-    assert calls[0]["max_tokens"] == 700   # bounded generation
+    assert calls[0]["max_tokens"] == 1600  # bounded, thinking-model aware
     # the SQLite grounding made it into the prompt (not the model's job)
     prompt = calls[0]["messages"][1]["content"]
     assert "辞書エントリ(構造)" in prompt

@@ -402,12 +402,18 @@ class ProviderClient:
         self.timeout = timeout
 
     def chat(self, messages: list[dict], tools: list[dict] | None = None,
-             max_tokens: int | None = None) -> dict:
+             max_tokens: int | None = None,
+             extra_body: dict | None = None) -> dict:
         body: dict[str, Any] = {"model": self.model, "messages": messages}
         if tools:
             body["tools"] = tools
         if max_tokens:
             body["max_tokens"] = max_tokens
+        # extra runtime-specific keys (e.g. chat_template_kwargs for local
+        # llama.cpp servers) — LOCAL ONLY: hosted OpenAI-compatible APIs
+        # reject unknown body keys with a 400
+        if extra_body and self.provider.is_local:
+            body.update(extra_body)
         resp = requests.post(
             f"{self.endpoint}/chat/completions",
             headers=self.headers,

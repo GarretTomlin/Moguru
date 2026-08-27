@@ -263,10 +263,19 @@ async def ask(request: Request) -> JSONResponse:
         {"role": "system", "content": system},
         {"role": "user", "content": user},
     ]
+    # Thinking models (qwen3.8 via LM Studio) can burn an entire small
+    # budget on reasoning_content and return EMPTY content with
+    # finish_reason=length. Escalate the budget across attempts instead of
+    # failing empty; ask local runtimes to skip thinking outright (unknown
+    # body keys are ignored by llama.cpp-family servers, but hosted APIs
+    # would 400 — so it's gated to local providers inside the client).
     try:
         answer = ""
-        for _attempt in range(2):  # thinking models can emit an empty turn
-            response = router.chat(messages, max_tokens=700)
+        for budget in (1600, 3200):
+            response = router.chat(
+                messages, max_tokens=budget,
+                extra_body={"chat_template_kwargs": {"enable_thinking": False}},
+            )
             answer = (response["choices"][0]["message"].get("content") or "")
             answer = answer.split("</think>")[-1].strip()
             if answer:

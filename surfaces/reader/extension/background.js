@@ -184,7 +184,14 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
           method: "POST", body: JSON.stringify({ text: msg.text }) }) });
       } else if (msg.type === "moguru:mine") {
         const data = await engineFetch("/mine", {
-          method: "POST", body: JSON.stringify({ text: msg.text, add: !!msg.add }) });
+          method: "POST",
+          body: JSON.stringify({
+            text: msg.text,
+            // the clicked word is authoritative (Reader §3) — without it
+            // the engine auto-candidates the whole sentence and 422s
+            target: msg.target || undefined,
+            add: !!msg.add,
+          }) });
         if (msg.add) await bumpAndBroadcast();
         sendResponse({ ok: true, data });
       } else if (msg.type === "moguru:mark") {

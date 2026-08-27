@@ -69,12 +69,15 @@ class OpenAICompatClient:
         self.timeout = timeout
 
     def chat(self, messages: list[dict], tools: list[dict] | None = None,
-             max_tokens: int | None = None) -> dict:
+             max_tokens: int | None = None,
+             extra_body: dict | None = None) -> dict:
         body: dict[str, Any] = {"model": self.model, "messages": messages}
         if tools:
             body["tools"] = tools
         if max_tokens:
             body["max_tokens"] = max_tokens
+        if extra_body:  # local endpoint by construction — safe to extend
+            body.update(extra_body)
         resp = requests.post(
             f"{self.endpoint}/chat/completions", json=body, timeout=self.timeout
         )
@@ -117,11 +120,13 @@ class ModelRouter:
                 )
 
     def chat(self, messages: list[dict], tools: list[dict] | None = None,
-             max_tokens: int | None = None) -> dict:
+             max_tokens: int | None = None,
+             extra_body: dict | None = None) -> dict:
         last_error: Exception | None = None
         for client in self.clients:
             try:
-                return client.chat(messages, tools, max_tokens=max_tokens)
+                return client.chat(messages, tools, max_tokens=max_tokens,
+                                   extra_body=extra_body)
             except requests.RequestException as e:
                 last_error = e
                 continue

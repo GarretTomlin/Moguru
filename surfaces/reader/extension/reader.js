@@ -227,14 +227,20 @@ function applyBands(spanLists, bodyItems, pageText, tokens) {
     const hits = banded.filter((t) => t.char_end > start && t.char_start < end);
     if (!hits.length) continue;
     const sole = covered.length === 1 && covered[0].textContent === item.str;
+    if (!covered.length) {
+      console.warn("moguru: no spans for item —", JSON.stringify(item.str));
+      continue;
+    }
     if (!tinted || !sole) {
+      // whole-run banding: stack every hit's class (CSS decides the visible
+      // color); a run carrying two banded tokens still shows BOTH marks
       for (const span of covered) {
         if (!span.classList.contains("moguru-tok")) {
           span.classList.add("moguru-tok");
           span.dataset.lemma = hits[0].lemma;
           span.dataset.band = hits[0].band;
         }
-        span.classList.add(`moguru-${hits[0].band}`);
+        for (const t of hits) span.classList.add(`moguru-${t.band}`);
       }
       continue;
     }
@@ -436,12 +442,14 @@ function openPop(tok) {
   });
   btn("Anki", async (e) => {
     e.target.disabled = true;
-    const r2 = await send({ type: "moguru:mine", text: sentence, target: lemma, add: true });
+    // target = the clicked SURFACE form — /mine's target path matches it in
+    // the sentence (the lemma often isn't present in inflected text)
+    const r2 = await send({ type: "moguru:mine", text: sentence, target: word, add: true });
     body.style.display = "block"; body.textContent = "";
     const item = (r2?.data?.results || [])[0];
     body.textContent = item?.note_id
       ? `✔ card #${item.note_id} — ${item.candidate.target}`
-      : `⚠ ${item?.error || "no candidate"}`;
+      : `⚠ ${item?.error || r2?.error || "no candidate"}`;
   });
   btn("既知 known", async (e) => {
     e.target.disabled = true;
@@ -460,12 +468,18 @@ function kvDiv(k, v) {
 
 function sentenceOf(tok) {
   const para = tok.closest("p");
-  if (para && para.closest(".textpage")) {
-    return para.textContent.replace(/\s+/g, " ").trim().slice(0, 300);
-  }
-  const page = tok.closest(".page");
-  const text = (page?.innerText || tok.textContent || "").replace(/\s+/g, " ").trim();
-  return text.slice(0, 300);
+  const raw = (para && para.closest(".textpage"))
+    ? para.textContent
+    : (tok.closest(".page")?.innerText || tok.textContent || "");
+  // text-layer runs inject whitespace between EVERYTHING (span boundaries) —
+  // 「あ る こ と」 is garbage for the model, the card Sentence field, and
+  // /mine target matching. Spaces between CJK chars never occur in real
+  // prose, so collapse them; keep real Latin word spacing intact.
+  return raw
+    .replace(/(?<=[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff])\s+(?=[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff])/g, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 300);
 }
 
 // panel display on the extension page: background broadcasts via
