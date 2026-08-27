@@ -60,6 +60,26 @@ class Provider:
         return host.startswith("localhost") or host.startswith("127.0.0.1") or host.startswith("[")
 
 
+# Hosted runtimes with an OpenAI-compatible endpoint. `provider add
+# --runtime <name>` fills the endpoint and default key-variable name, so a
+# hosted main model is one export + one command. Keys are NEVER stored —
+# only the environment-variable name referencing them.
+HOSTED_RUNTIME_PRESETS: dict[str, dict[str, str]] = {
+    "gemini": {
+        "endpoint": "https://generativelanguage.googleapis.com/v1beta/openai",
+        "api_key_env": "GEMINI_API_KEY",
+    },
+    "openai": {
+        "endpoint": "https://api.openai.com/v1",
+        "api_key_env": "OPENAI_API_KEY",
+    },
+    "openrouter": {
+        "endpoint": "https://openrouter.ai/api/v1",
+        "api_key_env": "OPENROUTER_API_KEY",
+    },
+}
+
+
 # ---------------------------------------------------------------------------
 # Store — data/user/providers.json
 # ---------------------------------------------------------------------------
@@ -112,6 +132,14 @@ def get_provider(provider_id: str, config: Config | None = None) -> Provider | N
 
 
 def add_provider(provider: Provider, config: Config | None = None) -> None:
+    # hosted preset: --runtime gemini/openai/openrouter fills the endpoint
+    # (explicit --endpoint still wins) and the default key-variable name
+    preset = HOSTED_RUNTIME_PRESETS.get(provider.runtime or "")
+    if preset:
+        if not provider.endpoint:
+            provider.endpoint = preset["endpoint"]
+        if not provider.api_key_env:
+            provider.api_key_env = preset["api_key_env"]
     providers = load_providers(config)
     if any(p.id == provider.id for p in providers):
         raise ProviderError(f"provider id {provider.id!r} already exists "

@@ -52,6 +52,21 @@ referenced by `id`.
 
 No file editing required.
 
+Hosted runtimes with an OpenAI-compatible endpoint have presets — the
+endpoint and key-variable name fill themselves:
+
+```bash
+export GEMINI_API_KEY="…"   # the key lives in your env, never in a file
+
+moguru provider add gemini --runtime gemini --model gemini-2.5-flash
+moguru model set main gemini
+```
+
+(`openai` and `openrouter` presets work the same way; `--endpoint` and
+`--api-key-env` always win if you pass them.)
+
+Any other OpenAI-compatible endpoint, explicitly:
+
 ```bash
 moguru provider add claude \
   --endpoint https://api.anthropic.com/v1 \

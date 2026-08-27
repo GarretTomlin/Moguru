@@ -92,6 +92,36 @@ def test_shadow_hosted_guardrail_is_cli_level(temp_config):
     assert not provider.is_local  # what triggers the warning
 
 
+def test_hosted_runtime_preset_gemini(temp_config, monkeypatch):
+    """`--runtime gemini` fills endpoint + key name; the key itself is only
+    ever referenced by env-var name (never stored)."""
+    monkeypatch.setenv("GEMINI_API_KEY", "test-key")
+    pm.add_provider(
+        pm.Provider(id="gemini", endpoint="", model="gemini-2.5-flash",
+                    runtime="gemini"),
+        temp_config,
+    )
+    (g,) = [p for p in pm.load_providers(temp_config) if p.id == "gemini"]
+    assert g.endpoint == ("https://generativelanguage.googleapis.com"
+                          "/v1beta/openai")
+    assert g.api_key_env == "GEMINI_API_KEY"
+    assert not g.is_local
+    pm.remove_provider("gemini", temp_config)
+
+
+def test_hosted_runtime_preset_explicit_values_win(temp_config, monkeypatch):
+    monkeypatch.setenv("MY_KEY", "test-key")
+    pm.add_provider(
+        pm.Provider(id="custom", endpoint="https://proxy.example.com/v1",
+                    model="m", api_key_env="MY_KEY", runtime="gemini"),
+        temp_config,
+    )
+    (p,) = [p for p in pm.load_providers(temp_config) if p.id == "custom"]
+    assert p.endpoint == "https://proxy.example.com/v1"  # explicit wins
+    assert p.api_key_env == "MY_KEY"
+    pm.remove_provider("custom", temp_config)
+
+
 @pytest.mark.integration
 def test_validate_live_ollama(temp_config):
     import requests

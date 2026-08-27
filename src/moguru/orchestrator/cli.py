@@ -539,7 +539,8 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--api-key-env", default=None,
                     help="env var holding the API key (hosted only)")
     sp.add_argument("--runtime", default=None,
-                    help="informational: ollama | lmstudio | hosted")
+                    help="ollama | lmstudio | gemini | openai | openrouter "
+                         "(hosted runtimes fill the endpoint + key name)")
     sp.set_defaults(func=cmd_provider)
 
     sp = sub.add_parser("model", help="bind/test model roles (main | shadow)")
