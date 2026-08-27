@@ -68,40 +68,40 @@ async function renderPage(pdf, pageNum) {
      itemTop(i) > viewport.height * 0.94);
   const bodyItems = items.filter((i) => !isFurigana(i) && !isPageFurniture(i));
 
-  // Render the OFFICIAL pdf.js TextLayer — it measures each run and applies
-  // the embedded font + exact scaling, so colored glyphs sit precisely on
-  // the canvas glyphs (no offset duplicate). Falls back to manual spans.
-  let pageSpans = null;
-  if (pdfjsLib.TextLayer) {
-    try {
-      const tl = new pdfjsLib.TextLayer({
-        textContentSource: textContent.items,
-        container: textLayer,
-        viewport,
-      });
-      await tl.render();
-      pageSpans = [...textLayer.querySelectorAll("span")];
-    } catch (e) {
-      console.warn("moguru: official TextLayer failed, falling back", e);
-      textLayer.innerHTML = "";
-      pageSpans = null;
+  // Manual text layer with the official viewer's alignment trick: after
+  // laying out each span (embedded fontFamily when available), MEASURE it
+  // and scale to the item's declared width. That is what makes colored
+  // glyphs sit precisely on the canvas glyphs — no offset ghost copy —
+  // without depending on pdf.js internals.
+  const pageSpans = [];
+  for (const item of items) {
+    const span = document.createElement("span");
+    const tx = pdfjsLib.Util.transform(viewport.transform, item.transform);
+    const angle = Math.atan2(tx[1], tx[0]);
+    const fontHeight = Math.hypot(tx[2], tx[3]);
+    span.textContent = item.str;
+    span.style.left = `${tx[4]}px`;
+    span.style.top = `${tx[5] - fontHeight}px`;
+    span.style.fontSize = `${fontHeight}px`;
+    if (item.fontName) span.style.fontFamily = item.fontName;
+    if (angle) span.dataset.angle = angle;
+    textLayer.appendChild(span);
+
+    // fit-to-width: scale the rendered run to the PDF's declared width.
+    // item.width's unit convention varies; pick whichever candidate ratio
+    // is sane.
+    const measured = span.getBoundingClientRect().width;
+    if (measured > 0 && item.width > 0) {
+      for (const expected of [item.width * viewport.scale, item.width]) {
+        const sx = expected / measured;
+        if (sx >= 0.6 && sx <= 1.67) {
+          span.style.transform =
+            (angle ? `rotate(${angle}rad) ` : "") + `scaleX(${sx})`;
+          break;
+        }
+      }
     }
-  }
-  if (!pageSpans) {
-    for (const item of items) {
-      const span = document.createElement("span");
-      const tx = pdfjsLib.Util.transform(viewport.transform, item.transform);
-      const angle = Math.atan2(tx[1], tx[0]);
-      const fontHeight = Math.hypot(tx[2], tx[3]);
-      span.textContent = item.str;
-      span.style.left = `${tx[4]}px`;
-      span.style.top = `${tx[5] - fontHeight}px`;
-      span.style.fontSize = `${fontHeight}px`;
-      if (item.fontName) span.style.fontFamily = item.fontName;
-      if (angle) span.style.transform = `rotate(${angle}rad)`;
-      textLayer.appendChild(span);
-    }
-    pageSpans = [...textLayer.querySelectorAll("span")];
+    pageSpans.push(span);
   }
 
   // zip spans with the FULL items array (same order), mark excluded runs,
@@ -182,7 +182,11 @@ async function openPdf(file) {
   const buf = await file.arrayBuffer();
   const pdf = await pdfjsLib.getDocument({ data: buf }).promise;
   for (let n = 1; n <= Math.min(pdf.numPages, 200); n++) {
-    await renderPage(pdf, n); // sequential keeps memory sane
+    try {
+      await renderPage(pdf, n); // sequential keeps memory sane
+    } catch (e) {
+      console.warn(`moguru: page ${n} failed`, e); // one bad page never stops the book
+    }
   }
 }
 
