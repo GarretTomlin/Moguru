@@ -7,6 +7,7 @@ or threshold.
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -17,6 +18,29 @@ import yaml
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
 DEFAULT_CONFIG_PATH = REPO_ROOT / "config.yaml"
+
+
+def load_dotenv(path: Path | str | None = None) -> None:
+    """Optional `data/user/.env` — KEY=VALUE lines for provider API keys.
+
+    The file lives under gitignored user state, so keys stay out of the repo
+    without shell-profile juggling (`moguru serve` from any terminal sees
+    them). Values only fill UNSET variables: a real export always wins.
+    """
+    path = Path(path) if path else REPO_ROOT / "data" / "user" / ".env"
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return
+    for line in lines:
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, _, value = line.partition("=")
+        key = key.strip()
+        value = value.strip().strip("'\"")
+        if key:
+            os.environ.setdefault(key, value)
 
 
 @dataclass
@@ -69,6 +93,7 @@ class Config:
     # ------------------------------------------------------------------
     @classmethod
     def load(cls, path: Path | str | None = None) -> "Config":
+        load_dotenv()  # data/user/.env provider keys, if present
         path = Path(path) if path else DEFAULT_CONFIG_PATH
         with open(path, encoding="utf-8") as f:
             raw = yaml.safe_load(f) or {}

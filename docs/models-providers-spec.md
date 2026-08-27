@@ -62,6 +62,15 @@ moguru provider add gemini --runtime gemini --model gemini-2.5-flash
 moguru model set main gemini
 ```
 
+Instead of exporting in every shell, put the key once in
+`data/user/.env` (gitignored user state):
+
+```bash
+echo 'GEMINI_API_KEY="…"' >> data/user/.env
+```
+
+The engine loads it at startup; a real export always overrides it.
+
 (`openai` and `openrouter` presets work the same way; `--endpoint` and
 `--api-key-env` always win if you pass them.)
 

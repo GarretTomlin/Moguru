@@ -155,3 +155,28 @@ def test_list_models_normalizes_google_prefix(monkeypatch):
     ids = pm._list_models("https://x.example/v1", {})
     assert "gemini-3.1-pro-preview" in ids
     assert not any(i.startswith("models/") for i in ids)
+
+
+def test_dotenv_fills_unset_only(tmp_path, monkeypatch):
+    """data/user/.env supplies keys to any shell; a real export wins."""
+    import os
+
+    from moguru.config import load_dotenv
+
+    envf = tmp_path / ".env"
+    envf.write_text(
+        "# comment\n"
+        "GEMINI_API_KEY=from-file\n"
+        "QUOTED=\"quoted-value\"\n"
+        "not-a-line-without-equals\n",
+        encoding="utf-8",
+    )
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    monkeypatch.delenv("QUOTED", raising=False)
+    load_dotenv(envf)
+    assert os.environ["GEMINI_API_KEY"] == "from-file"
+    assert os.environ["QUOTED"] == "quoted-value"
+    # a real export always beats the file
+    monkeypatch.setenv("GEMINI_API_KEY", "from-export")
+    load_dotenv(envf)
+    assert os.environ["GEMINI_API_KEY"] == "from-export"
