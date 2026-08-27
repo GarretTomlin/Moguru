@@ -6,8 +6,11 @@ import * as pdfjsLib from "./lib/pdf.min.mjs";
 pdfjsLib.GlobalWorkerOptions.workerSrc = "lib/pdf.worker.min.mjs";
 
 const pagesEl = document.getElementById("pages");
+const textPagesEl = document.getElementById("textpages");
 let bandsOn = true;
 let knownVersion = null;
+const pageTexts = new Map(); // pageNum -> { text, tokens }
+let textMode = false;
 
 function send(msg) {
   return new Promise((resolve) => chrome.runtime.sendMessage(msg, resolve));
@@ -136,6 +139,7 @@ async function renderPage(pdf, pageNum) {
     try {
       const data = await annotateText(pageText);
       if (data) {
+        pageTexts.set(pageNum, { text: pageText, tokens: data.tokens });
         applyBands(bodySpans, bodyItems, pageText, data.tokens);
         break;
       }
@@ -186,6 +190,71 @@ async function openPdf(file) {
     }
   }
 }
+
+// ---------------------------------------------------------------------------
+// text view: re-typeset each page's cleaned text — colored glyphs are real
+// DOM text, so banding is exact by construction (no canvas-pixel physics).
+// ---------------------------------------------------------------------------
+
+function buildTextPage(pageNum, { text, tokens }) {
+  const div = document.createElement("div");
+  div.className = "textpage";
+  div.dataset.page = pageNum;
+  // sentences -> paragraphs; track each paragraph's offset in `text` so
+  // token char ranges map straight onto the DOM we build
+  const paras = [];
+  let start = 0;
+  for (let i = 0; i < text.length; i++) {
+    if ("。！？".includes(text[i])) {
+      paras.push([start, i + 1]);
+      start = i + 1;
+    }
+  }
+  if (start < text.length) paras.push([start, text.length]);
+
+  const banded = tokens
+    .filter((t) => t.band && t.band !== "plain" && t.band !== "known")
+    .sort((a, b) => a.char_start - b.char_start);
+
+  for (const [p0, p1] of paras) {
+    const p = document.createElement("p");
+    let cursor = p0;
+    for (const t of banded) {
+      if (t.char_end <= p0 || t.char_start >= p1 || t.char_start < cursor) continue;
+      if (t.char_start > cursor) p.appendChild(document.createTextNode(text.slice(cursor, t.char_start)));
+      const span = document.createElement("span");
+      span.className = `moguru-tok moguru-${t.band}`;
+      span.dataset.lemma = t.lemma;
+      span.dataset.band = t.band;
+      span.textContent = text.slice(t.char_start, t.char_end);
+      p.appendChild(span);
+      cursor = t.char_end;
+    }
+    if (cursor < p1) p.appendChild(document.createTextNode(text.slice(cursor, p1)));
+    if (p.textContent.trim()) div.appendChild(p);
+  }
+  const num = document.createElement("div");
+  num.className = "pgnum";
+  num.textContent = `— ${pageNum} —`;
+  div.appendChild(num);
+  return div;
+}
+
+function rebuildTextPages() {
+  textPagesEl.innerHTML = "";
+  for (const [pageNum, data] of [...pageTexts].sort((a, b) => a[0] - b[0])) {
+    textPagesEl.appendChild(buildTextPage(pageNum, data));
+  }
+}
+
+document.getElementById("viewToggle").addEventListener("click", () => {
+  textMode = !textMode;
+  if (textMode) rebuildTextPages();
+  pagesEl.style.display = textMode ? "none" : "";
+  textPagesEl.style.display = textMode ? "" : "none";
+  document.getElementById("viewToggle").textContent = textMode ? "原文表示" : "テキスト表示";
+  window.scrollTo({ top: 0 });
+});
 
 document.getElementById("file").addEventListener("change", (ev) => {
   const file = ev.target.files[0];
@@ -297,6 +366,10 @@ function kvDiv(k, v) {
 }
 
 function sentenceOf(tok) {
+  const para = tok.closest("p");
+  if (para && para.closest(".textpage")) {
+    return para.textContent.replace(/\s+/g, " ").trim().slice(0, 300);
+  }
   const page = tok.closest(".page");
   const text = (page?.innerText || tok.textContent || "").replace(/\s+/g, " ").trim();
   return text.slice(0, 300);

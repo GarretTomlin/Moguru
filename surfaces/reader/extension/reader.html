@@ -38,18 +38,30 @@
     }
     .page .textLayer span[data-furigana] { pointer-events: none; }
     .moguru-pop { position: fixed; }
+    /* Text view: the page's own text re-typeset — colored glyphs are real
+       DOM text here, so banding is pixel-perfect by construction. */
+    .textpage {
+      background: white; max-width: 720px; margin: 0 auto 18px;
+      padding: 28px 34px; box-shadow: 0 2px 12px rgba(0,0,0,.4);
+      font-size: 19px; line-height: 2.1; color: #1a1a1a;
+      letter-spacing: .02em;
+    }
+    .textpage p { margin: 0 0 1.1em; }
+    .textpage .pgnum { color: #999; font-size: 12px; text-align: center; }
   </style>
 </head>
 <body>
   <div id="toolbar">
     <b>潜る PDF reader</b>
     <input type="file" id="file" accept="application/pdf">
+    <button id="viewToggle">テキスト表示</button>
     <button id="toggle">toggle bands (Alt+M)</button>
     <span id="hint" style="opacity:.7; font-size:12px">
-      right-click a word: explain / send to Anki / mark known
+      click a word: explain / Anki / mark known
     </span>
   </div>
   <div id="pages"></div>
+  <div id="textpages" style="display:none"></div>
   <script type="module" src="reader.js"></script>
 </body>
 </html>
