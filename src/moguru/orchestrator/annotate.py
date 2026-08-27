@@ -12,11 +12,17 @@ the same parser + kb logic as mining/comprehensibility — nothing reinvented.
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from moguru.config import Config
 from moguru.mcp.kb_mcp import core as kb_core
 from moguru.mcp.parser_mcp import core as parser_core
+
+# Only genuinely Japanese surfaces carry a band — Latin/digit runs inside
+# Japanese text (French quotes, "Himmel", numbers) stay plain, else every
+# foreign word on a page paints amber.
+_JA_CHARS = re.compile(r"[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]")
 
 
 def annotate_text(text: str, config: Config | None = None) -> dict[str, Any]:
@@ -56,6 +62,8 @@ def annotate_text(text: str, config: Config | None = None) -> dict[str, Any]:
             }
             if not parser_core.is_content_word(t):
                 tok["band"] = "plain"  # particles/aux/symbols stay unstyled
+            elif not _JA_CHARS.search(t["surface"]):
+                tok["band"] = "plain"  # non-Japanese runs (Latin, digits)
             elif t["lemma"] in known:
                 tok["band"] = "known"
             elif len(unknown) <= config.iplus_threshold:

@@ -18,12 +18,15 @@
     .page canvas { display: block; }
     .page .textLayer { position: absolute; inset: 0; overflow: hidden;
       line-height: 1; text-align: initial; }
-    /* pdf.js text layer spans; moguru bands ride on top */
+    /* pdf.js text layer: transparent glyphs used only for selection. Banded
+       spans get COLOR of their own — the text layer renders the colored
+       glyphs precisely over the canvas ones (color the text, not a box). */
     .page .textLayer span { position: absolute; white-space: pre;
       transform-origin: 0 0; color: transparent; cursor: default; }
-    .page .textLayer span.moguru-iplus, .page .textLayer span.moguru-new_hard {
-      border-radius: 2px;
-    }
+    .page .textLayer span.moguru-iplus { color: var(--moguru-iplus-color); }
+    .page .textLayer span.moguru-new_hard { color: var(--moguru-hard-color); }
+    .page .textLayer span.moguru-known_unstable { color: var(--moguru-unstable-color); }
+    .page .textLayer span[data-furigana] { pointer-events: none; }
   </style>
 </head>
 <body>

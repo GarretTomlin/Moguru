@@ -2,10 +2,9 @@
    CSS variables on :root by options.js sync). */
 
 :root {
-  --moguru-iplus-bg: rgba(74, 222, 128, 0.28);   /* green */
-  --moguru-iplus-underline: #16a34a;
-  --moguru-hard-bg: rgba(251, 191, 36, 0.30);    /* amber */
-  --moguru-hard-underline: #d97706;
+  --moguru-iplus-color: #15803d;        /* green text — mine me */
+  --moguru-hard-color: #b45309;         /* amber text — too hard for now */
+  --moguru-unstable-color: #7c3aed;     /* violet text — shaky in practice */
 }
 
 html.moguru-off .moguru-tok,
@@ -14,24 +13,29 @@ html.moguru-off .moguru-legend {
 }
 
 .moguru-tok {
-  border-radius: 3px;
   cursor: context-menu;
 }
+/* Color the kanji text itself — no highlight boxes. */
 .moguru-iplus {
-  background: var(--moguru-iplus-bg);
-  border-bottom: 2px solid var(--moguru-iplus-underline);
+  color: var(--moguru-iplus-color);
+  font-weight: 600;
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, var(--moguru-iplus-color) 45%, transparent);
+  text-underline-offset: 3px;
 }
 .moguru-new_hard {
-  background: var(--moguru-hard-bg);
-  border-bottom: 2px dotted var(--moguru-hard-underline);
+  color: var(--moguru-hard-color);
+  text-decoration: underline dotted;
+  text-decoration-color: color-mix(in srgb, var(--moguru-hard-color) 45%, transparent);
+  text-underline-offset: 3px;
+}
+.moguru-known_unstable {
+  color: var(--moguru-unstable-color);
+  text-decoration: underline dotted;
+  text-decoration-color: var(--moguru-unstable-color);
+  text-underline-offset: 3px;
 }
 .moguru-known { /* clean page: known words unstyled */ }
-.moguru-known_unstable {
-  /* paper-known but behaviorally shaky (shadow model) — subtle dotted marker
-     so false-known words surface while you read (Reader spec §2 hook) */
-  border-bottom: 2px dotted #8b5cf6;
-  background: rgba(139, 92, 246, 0.12);
-}
 
 .moguru-legend {
   position: fixed;

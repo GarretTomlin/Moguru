@@ -44,10 +44,23 @@ async function renderPage(pdf, pageNum) {
 
   // text content -> positioned spans (pdf.js convention)
   const textContent = await page.getTextContent();
-  for (const item of textContent.items) {
-    if (!item.str || !item.str.trim()) continue;
+  // Ruby editions (e.g. 青空文庫-style PDFs) interleave furigana as separate
+  // SMALL text runs beside the kanji. Distinguish by font height vs the
+  // page median: readings are excluded from the text we annotate AND from
+  // the span map — the tokenizer then sees clean prose.
+  function itemHeight(i) {
+    if (i.height) return i.height;
+    const tx = pdfjsLib.Util.transform(viewport.transform, i.transform);
+    return Math.hypot(tx[2], tx[3]);
+  }
+  const items = textContent.items.filter((i) => i.str && i.str.trim());
+  const heights = items.map(itemHeight).filter((h) => h > 0).sort((a, b) => a - b);
+  const medianH = heights.length ? heights[Math.floor(heights.length / 2)] : 0;
+  const isFurigana = (i) => medianH > 0 && itemHeight(i) < medianH * 0.75;
+  const bodyItems = items.filter((i) => !isFurigana(i));
+
+  for (const item of items) {
     const span = document.createElement("span");
-    // pdf.js transform: [a,b,c,d,e,f] — derive position + size
     const tx = pdfjsLib.Util.transform(viewport.transform, item.transform);
     const angle = Math.atan2(tx[1], tx[0]);
     const fontHeight = Math.hypot(tx[2], tx[3]);
@@ -57,29 +70,30 @@ async function renderPage(pdf, pageNum) {
     span.style.top = `${top}px`;
     span.style.fontSize = `${fontHeight}px`;
     if (angle) span.style.transform = `rotate(${angle}rad)`;
+    if (isFurigana(item)) span.dataset.furigana = "1";
     textLayer.appendChild(span);
   }
 
-  // annotate this page's text: one annotate call per page, then band the spans
-  const pageText = textContent.items.map((i) => i.str).join("");
+  // annotate this page's body text (furigana excluded) and band the spans
+  const pageText = bodyItems.map((i) => i.str).join("");
   try {
     const data = await annotateText(pageText);
-    if (data) applyBands(textLayer, textContent.items, data.tokens);
+    if (data) applyBands(textLayer, bodyItems, data.tokens);
   } catch (e) {
     console.warn("moguru annotate failed", e);
   }
 }
 
-// Map engine token offsets back onto textLayer spans. We rebuild the joined
-// text the same way renderPage did, so offsets line up; each token is applied
-// to the span(s) it overlaps.
+// Map engine token offsets back onto textLayer spans. Offsets and the joined
+// text come from the same bodyItems list, so they align by construction.
 function applyBands(textLayer, items, tokens) {
-  const spans = textLayer.querySelectorAll("span");
-  let idx = 0, cursor = 0;
+  const spans = [...textLayer.querySelectorAll("span")].filter(
+    (s) => s.dataset.furigana !== "1"
+  );
+  let cursor = 0;
   const spanRanges = [];
   for (const item of items) {
-    if (!item.str || !item.str.trim()) continue;
-    const span = spans[idx++];
+    const span = spans.shift();
     if (!span) break;
     spanRanges.push({ span, start: cursor, end: cursor + item.str.length });
     cursor += item.str.length;
