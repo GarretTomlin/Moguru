@@ -48,6 +48,23 @@
     }
     .textpage p { margin: 0 0 1.1em; }
     .textpage .pgnum { color: #999; font-size: 12px; text-align: center; }
+    /* 縦書き — traditional vertical writing. Text flows top→bottom, columns
+       right→left; underlines/color bands automatically sit on the correct
+       side of each column. */
+    #textpages.vertical .textpage {
+      writing-mode: vertical-rl;
+      height: 92vh;
+      max-width: none;
+      width: max-content;
+      margin: 0 24px 24px auto;
+      padding: 30px 26px;
+      font-size: 20px;
+      line-height: 2.3;
+      letter-spacing: .06em;
+    }
+    #textpages.vertical .textpage .pgnum {
+      writing-mode: horizontal-tb;
+    }
   </style>
 </head>
 <body>
@@ -55,6 +72,7 @@
     <b>潜る PDF reader</b>
     <input type="file" id="file" accept="application/pdf">
     <button id="viewToggle">テキスト表示</button>
+    <button id="writingMode" style="display:none">縦書き</button>
     <button id="toggle">toggle bands (Alt+M)</button>
     <span id="hint" style="opacity:.7; font-size:12px">
       click a word: explain / Anki / mark known

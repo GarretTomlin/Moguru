@@ -253,6 +253,15 @@ document.getElementById("viewToggle").addEventListener("click", () => {
   pagesEl.style.display = textMode ? "none" : "";
   textPagesEl.style.display = textMode ? "" : "none";
   document.getElementById("viewToggle").textContent = textMode ? "原文表示" : "テキスト表示";
+  document.getElementById("writingMode").style.display = textMode ? "" : "none";
+  window.scrollTo({ top: 0 });
+});
+
+let vertical = false;
+document.getElementById("writingMode").addEventListener("click", () => {
+  vertical = !vertical;
+  textPagesEl.classList.toggle("vertical", vertical);
+  document.getElementById("writingMode").textContent = vertical ? "横書き" : "縦書き";
   window.scrollTo({ top: 0 });
 });
 
