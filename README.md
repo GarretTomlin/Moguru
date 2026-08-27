@@ -2,7 +2,7 @@
 
 *dive deep into Japanese, one comprehensible sentence at a time*
 
-![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg) ![Local-first](https://img.shields.io/badge/local--first-yes-green.svg) ![Built on MCP](https://img.shields.io/badge/built%20on-MCP-8A2BE2.svg)
+![License](https://img.shields.io/badge/license-AGPL--3.0-red.svg) ![Local-first](https://img.shields.io/badge/local--first-yes-green.svg) ![Built on MCP](https://img.shields.io/badge/built%20on-MCP-8A2BE2.svg)
 
 You don't study a language. You dive into it.
 

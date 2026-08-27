@@ -3,7 +3,7 @@ name = "moguru"
 version = "0.1.0"
 description = "潜る Moguru — a local, model-driven Japanese immersion engine (AJATT / MIA / Migaku philosophy)"
 readme = "README.md"
-license = "Apache-2.0"
+license = "AGPL-3.0-only"
 requires-python = ">=3.12,<3.14"
 dependencies = [
     "mcp>=1.2.0,<2",        # official MCP SDK v1 (FastMCP servers + stdio client)
