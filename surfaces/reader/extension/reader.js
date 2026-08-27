@@ -68,26 +68,55 @@ async function renderPage(pdf, pageNum) {
      itemTop(i) > viewport.height * 0.94);
   const bodyItems = items.filter((i) => !isFurigana(i) && !isPageFurniture(i));
 
-  for (const item of items) {
-    const span = document.createElement("span");
-    const tx = pdfjsLib.Util.transform(viewport.transform, item.transform);
-    const angle = Math.atan2(tx[1], tx[0]);
-    const fontHeight = Math.hypot(tx[2], tx[3]);
-    const left = tx[4], top = tx[5] - fontHeight;
-    span.textContent = item.str;
-    span.style.left = `${left}px`;
-    span.style.top = `${top}px`;
-    span.style.fontSize = `${fontHeight}px`;
-    // CRITICAL for band coloring: use the PDF's OWN embedded font. render()
-    // registers embedded fonts as web faces named after item.fontName
-    // (g_d0_f1 …). With matching metrics, colored glyphs overlay the canvas
-    // glyphs exactly — no offset "ghost copy" beside the real kanji.
-    if (item.fontName) span.style.fontFamily = item.fontName;
-    if (angle) span.style.transform = `rotate(${angle}rad)`;
-    if (isFurigana(item)) span.dataset.furigana = "1";
-    if (isPageFurniture(item)) span.dataset.furigana = "1"; // excluded from map
-    textLayer.appendChild(span);
+  // Render the OFFICIAL pdf.js TextLayer — it measures each run and applies
+  // the embedded font + exact scaling, so colored glyphs sit precisely on
+  // the canvas glyphs (no offset duplicate). Falls back to manual spans.
+  let pageSpans = null;
+  if (pdfjsLib.TextLayer) {
+    try {
+      const tl = new pdfjsLib.TextLayer({
+        textContentSource: textContent.items,
+        container: textLayer,
+        viewport,
+      });
+      await tl.render();
+      pageSpans = [...textLayer.querySelectorAll("span")];
+    } catch (e) {
+      console.warn("moguru: official TextLayer failed, falling back", e);
+      textLayer.innerHTML = "";
+      pageSpans = null;
+    }
   }
+  if (!pageSpans) {
+    for (const item of items) {
+      const span = document.createElement("span");
+      const tx = pdfjsLib.Util.transform(viewport.transform, item.transform);
+      const angle = Math.atan2(tx[1], tx[0]);
+      const fontHeight = Math.hypot(tx[2], tx[3]);
+      span.textContent = item.str;
+      span.style.left = `${tx[4]}px`;
+      span.style.top = `${tx[5] - fontHeight}px`;
+      span.style.fontSize = `${fontHeight}px`;
+      if (item.fontName) span.style.fontFamily = item.fontName;
+      if (angle) span.style.transform = `rotate(${angle}rad)`;
+      textLayer.appendChild(span);
+    }
+    pageSpans = [...textLayer.querySelectorAll("span")];
+  }
+
+  // zip spans with the FULL items array (same order), mark excluded runs,
+  // and build the body-span list the band offsets will map onto.
+  const spanByItem = new Map();
+  const fullItems = textContent.items;
+  for (let k = 0; k < pageSpans.length && k < fullItems.length; k++) {
+    spanByItem.set(fullItems[k], pageSpans[k]);
+    if (isFurigana(fullItems[k]) || isPageFurniture(fullItems[k])) {
+      pageSpans[k].dataset.furigana = "1";
+    }
+  }
+  const bodySpans = bodyItems
+    .map((i) => spanByItem.get(i))
+    .filter(Boolean);
 
   // annotate this page's body text (furigana/page numbers excluded).
   // Latin runs are joined WITH a space so foreign words don't glue
@@ -110,7 +139,7 @@ async function renderPage(pdf, pageNum) {
     try {
       const data = await annotateText(pageText);
       if (data) {
-        applyBands(textLayer, bodyItems, pageText, data.tokens);
+        applyBands(bodySpans, bodyItems, pageText, data.tokens);
         break;
       }
     } catch (e) {
@@ -119,20 +148,18 @@ async function renderPage(pdf, pageNum) {
   }
 }
 
-// Map engine token offsets back onto textLayer spans. spans/bodyItems/pageText
-// derive from the SAME join (including the injected Latin spaces), so token
-// char ranges align with spans by construction.
-function applyBands(textLayer, items, pageText, tokens) {
-  const spans = [...textLayer.querySelectorAll("span")].filter(
-    (s) => s.dataset.furigana !== "1"
-  );
+// Band the official text-layer spans. spans/bodyItems/pageText derive from
+// the SAME join (injected Latin spaces included), so token ranges align.
+function applyBands(spans, items, pageText, tokens) {
   let cursor = 0;
   const spanRanges = [];
-  for (const item of items) {
-    const span = spans.shift();
-    if (!span) break;
-    spanRanges.push({ span, start: cursor, end: cursor + item.str.length });
-    cursor += item.str.length;
+  for (let k = 0; k < items.length && k < spans.length; k++) {
+    spanRanges.push({
+      span: spans[k],
+      start: cursor,
+      end: cursor + items[k].str.length,
+    });
+    cursor += items[k].str.length;
     // consume any space(s) injected between Latin runs before the next item
     while (cursor < pageText.length && pageText[cursor] === " ") cursor += 1;
   }
@@ -185,6 +212,88 @@ document.addEventListener("contextmenu", (ev) => {
     token: { word: tok.textContent, lemma: tok.dataset.lemma, sentence },
   });
 }, true);
+
+// right-click stash still works, but the primary interaction is left-click:
+document.addEventListener("click", (ev) => {
+  if (ev.target.closest?.(".moguru-pop")) return;
+  const tok = ev.target.closest?.("span.moguru-tok");
+  if (!tok) { closePop(); return; }
+  openPop(tok);
+}, true);
+document.addEventListener("keydown", (ev) => ev.key === "Escape" && closePop());
+
+let popEl = null;
+function closePop() { popEl?.remove(); popEl = null; }
+function openPop(tok) {
+  closePop();
+  const word = tok.textContent;
+  const lemma = tok.dataset.lemma || word;
+  const sentence = sentenceOf(tok);
+  popEl = document.createElement("div");
+  popEl.className = "moguru-pop";
+  const r = tok.getBoundingClientRect();
+  popEl.style.left = `${Math.max(8, r.left)}px`;
+  popEl.style.top = `${Math.max(8, r.top - 10)}px`;
+
+  const head = document.createElement("div");
+  head.className = "moguru-pop-head";
+  const w = document.createElement("span"); w.textContent = word;
+  const sm = document.createElement("small"); sm.textContent = lemma;
+  const x = document.createElement("button"); x.textContent = "×"; x.onclick = closePop;
+  head.append(w, sm, x);
+
+  const actions = document.createElement("div");
+  actions.className = "moguru-pop-actions";
+  const body = document.createElement("div");
+  body.className = "moguru-pop-body"; body.style.display = "none";
+
+  const btn = (label, fn) => {
+    const b = document.createElement("button");
+    b.textContent = label; b.onclick = fn; actions.appendChild(b);
+  };
+  btn("説明 explain", async (e) => {
+    e.target.disabled = true;
+    body.style.display = "block"; body.textContent = "…";
+    const r2 = await send({ type: "moguru:explain", word, sentence, lemma });
+    body.textContent = "";
+    if (!r2 || !r2.ok) { body.textContent = `⚠ ${r2?.error || "unreachable"}`; return; }
+    const toks = r2.entries?.tokens || [];
+    const t = toks.find((t) => t.lemma) || {};
+    body.append(kvDiv("reading", t.reading_kana || ""));
+    for (const [l, es] of Object.entries(r2.entries?.entries || {})) {
+      const gloss = (es[0]?.senses || []).flatMap((s) => s.gloss || []).slice(0, 3).join("; ");
+      body.append(kvDiv("JMdict", `${l}: ${gloss}`));
+    }
+    if (r2.answer) {
+      const ans = document.createElement("div");
+      ans.style.marginTop = "6px";
+      ans.textContent = r2.answer.slice(0, 900);
+      body.appendChild(ans);
+    }
+  });
+  btn("Anki", async (e) => {
+    e.target.disabled = true;
+    const r2 = await send({ type: "moguru:mine", text: sentence, target: lemma, add: true });
+    body.style.display = "block"; body.textContent = "";
+    const item = (r2?.data?.results || [])[0];
+    body.textContent = item?.note_id
+      ? `✔ card #${item.note_id} — ${item.candidate.target}`
+      : `⚠ ${item?.error || "no candidate"}`;
+  });
+  btn("既知 known", async (e) => {
+    e.target.disabled = true;
+    await send({ type: "moguru:mark", lemma });
+    closePop();
+  });
+  popEl.append(head, actions, body);
+  pagesEl.appendChild(popEl);
+}
+function kvDiv(k, v) {
+  const div = document.createElement("div");
+  const b = document.createElement("b"); b.textContent = `${k}: `;
+  div.append(b, document.createTextNode(v || ""));
+  return div;
+}
 
 function sentenceOf(tok) {
   const page = tok.closest(".page");

@@ -50,6 +50,53 @@ html.moguru-off .moguru-legend {
   pointer-events: none;
 }
 
+/* Click action card — opens on plain left-click of a banded word. */
+.moguru-pop {
+  position: absolute;
+  z-index: 2147483500;
+  width: 300px;
+  background: #101418;
+  color: #e8eaed;
+  border: 1px solid #2a3340;
+  border-radius: 10px;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.45);
+  font: 13px/1.5 sans-serif;
+  overflow: hidden;
+}
+.moguru-pop-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  padding: 8px 10px 4px;
+  font-size: 15px;
+  font-weight: 700;
+}
+.moguru-pop-head small { color: #8ab4f8; font-weight: 400; margin-left: 6px; }
+.moguru-pop-head button {
+  background: none; border: none; color: #9aa4b2;
+  font-size: 15px; cursor: pointer; padding: 0 2px;
+}
+.moguru-pop-actions { display: flex; gap: 6px; padding: 4px 10px 8px; }
+.moguru-pop-actions button {
+  flex: 1;
+  background: #1c2530;
+  color: #e8eaed;
+  border: 1px solid #324257;
+  border-radius: 6px;
+  padding: 5px 0;
+  font-size: 12px;
+  cursor: pointer;
+}
+.moguru-pop-actions button:hover { background: #27354a; }
+.moguru-pop-body {
+  padding: 6px 10px 10px;
+  border-top: 1px solid #2a3340;
+  max-height: 40vh;
+  overflow: auto;
+  white-space: pre-wrap;
+}
+.moguru-pop-body b { color: #8ab4f8; }
+
 .moguru-panel {
   position: fixed;
   bottom: 40px;

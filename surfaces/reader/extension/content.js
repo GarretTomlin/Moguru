@@ -276,6 +276,115 @@ function watchBlockExit(block) {
 }
 
 // ---------------------------------------------------------------------------
+// click action card — plain left-click a colored word for the actions
+// ---------------------------------------------------------------------------
+
+let popEl = null;
+function closePop() {
+  popEl?.remove();
+  popEl = null;
+}
+document.addEventListener("keydown", (ev) => {
+  if (ev.key === "Escape") closePop();
+});
+document.addEventListener("click", (ev) => {
+  if (ev.target.closest?.(".moguru-pop")) return; // clicks inside the card
+  const tok = ev.target.closest?.(".moguru-tok");
+  if (!tok) {
+    closePop();
+    return;
+  }
+  if (String(window.getSelection?.() || "")) return; // user is selecting text
+  openPop(tok);
+}, true);
+
+function openPop(tok) {
+  closePop();
+  const word = tok.textContent;
+  const lemma = tok.dataset.lemma || word;
+  const sentence = sentenceOf(tok);
+
+  popEl = document.createElement("div");
+  popEl.className = "moguru-pop";
+  const rect = tok.getBoundingClientRect();
+  popEl.style.left = `${Math.max(8, Math.min(window.innerWidth - 316, rect.left + window.scrollX))}px`;
+  popEl.style.top = `${Math.max(8, rect.top + window.scrollY - 10)}px`;
+
+  const head = document.createElement("div");
+  head.className = "moguru-pop-head";
+  head.append(makeTxt(word), makeSmall(lemma));
+  const x = document.createElement("button");
+  x.textContent = "×";
+  x.onclick = closePop;
+  head.appendChild(x);
+
+  const actions = document.createElement("div");
+  actions.className = "moguru-pop-actions";
+  const body = document.createElement("div");
+  body.className = "moguru-pop-body";
+  body.style.display = "none";
+
+  const btn = (label, fn) => {
+    const b = document.createElement("button");
+    b.textContent = label;
+    b.onclick = fn;
+    actions.appendChild(b);
+  };
+  btn("説明 explain", async (e) => {
+    e.target.disabled = true;
+    body.style.display = "block";
+    body.textContent = "…";
+    const r = await send({ type: "moguru:explain", word, sentence, lemma });
+    body.textContent = "";
+    if (!r || !r.ok) { body.textContent = `⚠ ${r?.error || "engine unreachable"}`; return; }
+    const toks = r.entries?.tokens || [];
+    const t = toks.find((t) => t.lemma) || {};
+    appendKv(body, "reading", t.reading_kana || "");
+    for (const [l, es] of Object.entries(r.entries?.entries || {})) {
+      for (const en of es.slice(0, 1)) {
+        const gloss = (en.senses || []).flatMap((s) => s.gloss || []).slice(0, 3).join("; ");
+        appendKv(body, "JMdict", `${l}: ${gloss}`);
+      }
+    }
+    if (r.answer) {
+      const ans = document.createElement("div");
+      ans.style.marginTop = "6px";
+      ans.textContent = r.answer.slice(0, 900);
+      body.appendChild(ans);
+    }
+  });
+  btn("Anki", async (e) => {
+    e.target.disabled = true;
+    const r = await send({ type: "moguru:mine", text: sentence, target: lemma, add: true });
+    body.style.display = "block";
+    body.textContent = "";
+    if (!r || !r.ok) { body.textContent = `⚠ ${r?.error || "engine unreachable"}`; return; }
+    const item = (r.data.results || [])[0];
+    body.textContent = item?.note_id
+      ? `✔ card #${item.note_id} — ${item.candidate.target}`
+      : `⚠ ${r.data.results?.[0]?.error || "no candidate"}`;
+  });
+  btn("既知 known", async (e) => {
+    e.target.disabled = true;
+    await send({ type: "moguru:mark", lemma });
+    closePop(); // repaint arrives via version broadcast
+  });
+
+  popEl.append(head, actions, body);
+  document.documentElement.appendChild(popEl);
+}
+
+function makeTxt(t) { const s = document.createElement("span"); s.textContent = t; return s; }
+function makeSmall(t) { const s = document.createElement("small"); s.textContent = t; return s; }
+function appendKv(parent, k, v) {
+  const div = document.createElement("div");
+  const b = document.createElement("b");
+  b.textContent = `${k}: `;
+  div.append(b, document.createTextNode(v || ""));
+  parent.appendChild(div);
+}
+
+// ---------------------------------------------------------------------------
 // messages from background
 // ---------------------------------------------------------------------------
 

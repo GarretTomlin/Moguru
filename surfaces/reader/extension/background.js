@@ -55,6 +55,35 @@ chrome.runtime.onInstalled.addListener(() => {
   });
 });
 
+// Shared explain: /lookup + /ask (+ a hard lookup signal for the shadow model)
+async function explainEngine(word, sentence, lemma) {
+  if (lemma) {
+    engineFetch("/signals", {
+      method: "POST",
+      body: JSON.stringify({
+        signals: [{
+          type: "lookup", key: lemma, key_kind: "vocab",
+          sentence, modality: "reading",
+        }],
+      }),
+    }).catch(() => {});
+  }
+  const [lookup, ask] = await Promise.allSettled([
+    engineFetch("/lookup", { method: "POST", body: JSON.stringify({ text: word }) }),
+    engineFetch("/ask", {
+      method: "POST",
+      body: JSON.stringify({
+        question: `この言葉「${word}」の読み方・意味・アクセントを教えてください。`,
+        context: sentence,
+      }),
+    }),
+  ]);
+  return {
+    entries: lookup.status === "fulfilled" ? lookup.value : { error: String(lookup.reason) },
+    answer: ask.status === "fulfilled" ? ask.value.answer : `(model unavailable: ${ask.reason})`,
+  };
+}
+
 chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   // The content script stashes the clicked token (lemma + sentence) on
   // right-click; fall back to the selection if present.
@@ -67,34 +96,11 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
     if (info.menuItemId === "moguru-explain") {
       if (!word.trim()) {
         await broadcastPanel(tab.id, {
-          error: "no word — right-click directly on a colored word (or select text first)",
+          error: "no word — click directly on a colored word (or select text first)",
         });
         return;
       }
-      // hard "didn't know it" evidence for the shadow model (§4)
-      if (stash.lemma) {
-        engineFetch("/signals", {
-          method: "POST",
-          body: JSON.stringify({
-            signals: [{
-              type: "lookup", key: stash.lemma, key_kind: "vocab",
-              sentence, modality: "reading",
-            }],
-          }),
-        }).catch(() => {});
-      }
-      const [lookup, ask] = await Promise.allSettled([
-        engineFetch("/lookup", { method: "POST", body: JSON.stringify({ text: word }) }),
-        engineFetch("/ask", {
-          method: "POST",
-          body: JSON.stringify({
-            question: `この言葉「${word}」の読み方・意味・アクセントを教えてください。`,
-            context: sentence,
-          }),
-        }),
-      ]);
-      const entries = lookup.status === "fulfilled" ? lookup.value : { error: String(lookup.reason) };
-      const answer = ask.status === "fulfilled" ? ask.value.answer : `(model unavailable: ${ask.reason})`;
+      const { entries, answer } = await explainEngine(word, sentence, stash.lemma);
       await broadcastPanel(tab.id, { word, sentence, entries, answer });
     } else if (info.menuItemId === "moguru-mine") {
       // Reader spec §3: pass the clicked word as the authoritative target.
@@ -164,6 +170,14 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
           body: JSON.stringify({ signals: msg.signals }),
         });
         sendResponse({ ok: true, accepted: data.accepted, total: data.total });
+      } else if (msg.type === "moguru:explain") {
+        const { entries, answer } = await explainEngine(msg.word, msg.sentence, msg.lemma);
+        sendResponse({ ok: true, entries, answer });
+      } else if (msg.type === "moguru:ask") {
+        const data = await engineFetch("/ask", {
+          method: "POST",
+          body: JSON.stringify({ question: msg.question, context: msg.context || "" }) });
+        sendResponse({ ok: true, answer: data.answer });
       } else if (msg.type === "moguru:lookup") {
         sendResponse({ ok: true, data: await engineFetch("/lookup", {
           method: "POST", body: JSON.stringify({ text: msg.text }) }) });

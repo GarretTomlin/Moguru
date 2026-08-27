@@ -35,7 +35,7 @@ Nothing is sent anywhere except to your own engine on `localhost`.
 - **Right-click a colored word** for the menu. *Send to Anki* creates the
   card for exactly the word you clicked, sentence included, and the page
   repaints (the word stops glowing because you're now learning it).
-- **Alt+M** toggles all highlighting off for distraction-free reading.
+- **Click a colored word** for the action card (Explain · Anki · Mark known). **Alt+M** toggles all highlighting off for distraction-free reading.
 - **Options** (click the extension icon): engine URL, band colors, on/off.
 - **PDFs:** click the extension icon → **Moguru PDF reader…** → open a PDF.
   It renders with PDF.js and annotates the selectable text layer the same
