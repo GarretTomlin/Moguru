@@ -65,6 +65,12 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
 
   try {
     if (info.menuItemId === "moguru-explain") {
+      if (!word.trim()) {
+        await broadcastPanel(tab.id, {
+          error: "no word — right-click directly on a colored word (or select text first)",
+        });
+        return;
+      }
       // hard "didn't know it" evidence for the shadow model (§4)
       if (stash.lemma) {
         engineFetch("/signals", {

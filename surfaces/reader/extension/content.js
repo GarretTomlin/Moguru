@@ -1,29 +1,33 @@
 // Moguru Reader — content script.
-// Walks visible Japanese text nodes, asks the engine to /annotate, wraps
-// banded tokens in styled spans. Lazy (IntersectionObserver) + debounced,
-// cached per (text hash + known-set version), repaints when the version
-// bumps (a word you just learned stops glowing).
+// Block-level annotation (the Yomitan approach): the full visible text of a
+// paragraph/block is sent to /annotate in ONE request (so the tokenizer gets
+// real sentence context), then banded tokens are mapped back onto the DOM.
+// Furigana (`<rt>`/`<rp>` inside <ruby>) is skipped — it's a reading aid,
+// not content to color. Lazy (IntersectionObserver) + debounced, cached per
+// (text hash + known-set version), repaints when the version bumps.
 
 const JA_RE = /[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]/;
 const SKIP_TAGS = new Set([
   "SCRIPT", "STYLE", "NOSCRIPT", "CODE", "PRE", "TEXTAREA", "INPUT",
   "SELECT", "BUTTON", "CANVAS", "SVG", "IFRAME",
+  "RT", "RP", // furigana readings — never annotate, never feed to the parser
 ]);
+const BLOCK_SEL = "p, li, h1, h2, h3, h4, h5, h6, td, th, dd, dt, blockquote, figcaption, article, div";
 
 let enabled = true;
 let knownVersion = null;
-const cache = new Map(); // textHash+version -> render plan
-const pending = new Set(); // nodes awaiting annotation
+const cache = new Map(); // textHash+version -> banded token plan
+const pending = new Set(); // blocks awaiting annotation
 const observer = new IntersectionObserver(
   (entries) => {
     for (const e of entries) {
       if (e.isIntersecting) {
         observer.unobserve(e.target);
-        queueNode(e.target);
+        queueBlock(e.target);
       }
     }
   },
-  { rootMargin: "200px" }
+  { rootMargin: "300px" }
 );
 
 // ---------------------------------------------------------------------------
@@ -41,19 +45,10 @@ function send(msg) {
   return new Promise((resolve) => chrome.runtime.sendMessage(msg, resolve));
 }
 
-function markDone(node) {
-  node.parentElement?.classList.add("moguru-done");
-}
-
-function queueNode(node) {
-  pending.add(node);
-  scheduleFlush();
-}
-
 let flushTimer = null;
-function scheduleFlush() {
-  if (flushTimer) return;
-  flushTimer = setTimeout(flush, 150);
+function queueBlock(block) {
+  pending.add(block);
+  if (!flushTimer) flushTimer = setTimeout(flush, 150);
 }
 
 async function flush() {
@@ -61,37 +56,72 @@ async function flush() {
   const batch = [...pending];
   pending.clear();
   if (!enabled) return;
-  for (const node of batch) {
-    if (!node.parentElement) continue; // detached while waiting
-    annotateNode(node).catch(() => markDone(node));
+  for (const block of batch) {
+    if (block.isConnected) annotateBlock(block).catch(() => {});
   }
 }
 
-async function annotateNode(node) {
-  const text = node.nodeValue;
-  if (!text || !JA_RE.test(text)) {
-    markDone(node);
-    return;
+// Text nodes of a block that belong to THIS block (not a nested one), with
+// ruby readings and code excluded. Returns the concatenated text plus the
+// node ranges so token char offsets can be mapped back.
+function collectText(block) {
+  const walker = document.createTreeWalker(block, NodeFilter.SHOW_TEXT, {
+    acceptNode(node) {
+      const p = node.parentElement;
+      if (!p || SKIP_TAGS.has(p.tagName)) return NodeFilter.FILTER_REJECT;
+      if (p.closest(".moguru-done, .moguru-panel, .moguru-legend")) return NodeFilter.FILTER_REJECT;
+      if (!node.nodeValue || !JA_RE.test(node.nodeValue)) return NodeFilter.FILTER_REJECT;
+      // text belonging to a nearer block (nested p inside a div, etc.)
+      if (p.closest(BLOCK_SEL) !== block && block !== document.body) return NodeFilter.FILTER_REJECT;
+      return NodeFilter.FILTER_ACCEPT;
+    },
+  });
+  const nodes = [];
+  let text = "";
+  while (walker.nextNode()) {
+    nodes.push({ node: walker.currentNode, start: text.length });
+    text += walker.currentNode.nodeValue;
   }
+  return { nodes, text };
+}
+
+async function annotateBlock(block) {
+  const { nodes, text } = collectText(block);
+  if (!nodes.length) return;
   const key = (await hashText(text)) + ":" + knownVersion;
   let plan = cache.get(key);
   if (!plan) {
     const resp = await send({ type: "moguru:annotate", text });
-    if (!resp || !resp.ok) {
-      markDone(node); // engine down — leave page clean
-      return;
-    }
+    if (!resp || !resp.ok) return; // engine down — leave page clean
     if (resp.version && resp.version !== knownVersion) {
       knownVersion = resp.version;
       cache.clear();
     }
-    plan = resp.data.tokens.filter((t) => t.band && t.band !== "plain");
+    plan = resp.data.tokens.filter((t) => t.band && t.band !== "plain" && t.band !== "known");
     cache.set((await hashText(text)) + ":" + knownVersion, plan);
   }
-  render(node, plan);
+  if (!plan.length) {
+    block.classList.add("moguru-done");
+    return;
+  }
+  // map block-text offsets back onto individual text nodes; a token spanning
+  // a node boundary (kanji + okurigana split by ruby markup) wraps each part
+  for (const { node, start } of nodes) {
+    const len = node.nodeValue.length;
+    const local = plan
+      .filter((t) => t.char_start < start + len && t.char_end > start)
+      .map((t) => ({
+        ...t,
+        char_start: Math.max(0, t.char_start - start),
+        char_end: Math.min(len, t.char_end - start),
+      }));
+    if (local.length) render(node, local);
+  }
+  block.classList.add("moguru-done");
+  watchBlockExit(block);
 }
 
-// Wrap banded tokens (char offsets into node.nodeValue) in styled spans.
+// Wrap the banded char-ranges of ONE text node in styled spans.
 function render(node, tokens) {
   const parent = node.parentElement;
   if (!parent) return;
@@ -112,8 +142,63 @@ function render(node, tokens) {
   }
   if (cursor < text.length) frag.appendChild(document.createTextNode(text.slice(cursor)));
   parent.replaceChild(frag, node);
-  parent.classList.add("moguru-done");
-  watchSentenceExits(parent);
+}
+
+// ---------------------------------------------------------------------------
+// block discovery (lazy)
+// ---------------------------------------------------------------------------
+
+function scan(root = document.body) {
+  const blocks = new Set();
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+    acceptNode(node) {
+      const p = node.parentElement;
+      if (!p || SKIP_TAGS.has(p.tagName)) return NodeFilter.FILTER_REJECT;
+      if (p.closest(".moguru-done, .moguru-panel, .moguru-legend")) return NodeFilter.FILTER_REJECT;
+      if (!node.nodeValue || !JA_RE.test(node.nodeValue)) return NodeFilter.FILTER_REJECT;
+      return NodeFilter.FILTER_ACCEPT;
+    },
+  });
+  while (walker.nextNode()) {
+    const b = walker.currentNode.parentElement.closest(BLOCK_SEL) || document.body;
+    if (!b.classList.contains("moguru-done")) blocks.add(b);
+  }
+  for (const b of blocks) observer.observe(b);
+}
+
+// ---------------------------------------------------------------------------
+// right-click: stash the clicked token for the background menu
+// ---------------------------------------------------------------------------
+
+document.addEventListener(
+  "contextmenu",
+  (ev) => {
+    const tok = ev.target.closest?.(".moguru-tok");
+    if (tok) {
+      send({
+        type: "moguru:stashToken",
+        token: {
+          word: tok.textContent,
+          lemma: tok.dataset.lemma,
+          sentence: sentenceOf(tok),
+        },
+      });
+    }
+  },
+  true
+);
+
+function sentenceOf(el) {
+  const block = el.closest(BLOCK_SEL);
+  // visible text of the block, furigana excluded (clone and strip rt/rp)
+  let text = "";
+  if (block) {
+    const clone = block.cloneNode(true);
+    clone.querySelectorAll("rt, rp").forEach((n) => n.remove());
+    text = clone.textContent || "";
+  }
+  text = (text || el.textContent || "").replace(/\s+/g, " ").trim();
+  return text.slice(0, 300);
 }
 
 // ---------------------------------------------------------------------------
@@ -161,9 +246,9 @@ document.addEventListener("pointerout", (ev) => {
   }
 });
 
-// complete: a sentence block that left the viewport without any interaction
-// on its tokens — the soft positive backbone. Throttled + capped.
-const seenSentences = new WeakSet();
+// complete: a block that scrolled past without any token interaction — the
+// soft positive backbone. Throttled + capped.
+const exitedBlocks = new WeakSet();
 const interactedLemmas = new Set();
 document.addEventListener("pointerdown", (ev) => {
   const tok = ev.target.closest?.(".moguru-tok");
@@ -173,8 +258,8 @@ const exitObserver = new IntersectionObserver((entries) => {
   for (const e of entries) {
     if (e.target.isConnected && !e.isIntersecting && e.boundingClientRect.top < 0) {
       exitObserver.unobserve(e.target);
-      if (seenSentences.has(e.target)) continue;
-      seenSentences.add(e.target);
+      if (exitedBlocks.has(e.target)) continue;
+      exitedBlocks.add(e.target);
       const lemmas = [...e.target.querySelectorAll(".moguru-tok")]
         .map((s) => s.dataset.lemma)
         .filter((l) => l && !interactedLemmas.has(l));
@@ -186,58 +271,8 @@ const exitObserver = new IntersectionObserver((entries) => {
     }
   }
 }, {});
-function watchSentenceExits(node) {
-  const block = node.closest?.("p, li, h1, h2, h3, td, div");
-  if (block) exitObserver.observe(block);
-}
-
-// ---------------------------------------------------------------------------
-// node discovery (lazy)
-// ---------------------------------------------------------------------------
-
-function scan(root = document.body) {
-  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
-    acceptNode(node) {
-      if (SKIP_TAGS.has(node.parentElement?.tagName)) return NodeFilter.FILTER_REJECT;
-      if (node.parentElement?.closest(".moguru-done, .moguru-panel, .moguru-legend"))
-        return NodeFilter.FILTER_REJECT;
-      if (!JA_RE.test(node.nodeValue)) return NodeFilter.FILTER_REJECT;
-      return NodeFilter.FILTER_ACCEPT;
-    },
-  });
-  const nodes = [];
-  while (walker.nextNode()) nodes.push(walker.currentNode);
-  for (const node of nodes) observer.observe(node.parentElement);
-}
-
-// ---------------------------------------------------------------------------
-// right-click: stash the clicked token for the background menu
-// ---------------------------------------------------------------------------
-
-document.addEventListener(
-  "contextmenu",
-  (ev) => {
-    const tok = ev.target.closest?.(".moguru-tok");
-    if (tok) {
-      const sentence = sentenceOf(tok);
-      send({
-        type: "moguru:stashToken",
-        token: {
-          word: tok.textContent,
-          lemma: tok.dataset.lemma,
-          sentence,
-        },
-      });
-    }
-  },
-  true
-);
-
-function sentenceOf(tok) {
-  // Best effort: the nearest block ancestor's text, trimmed to a sane length.
-  const block = tok.closest("p, li, h1, h2, h3, h4, td, div");
-  const text = (block?.innerText || tok.textContent || "").replace(/\s+/g, " ").trim();
-  return text.slice(0, 300);
+function watchBlockExit(block) {
+  exitObserver.observe(block);
 }
 
 // ---------------------------------------------------------------------------
@@ -259,23 +294,21 @@ chrome.runtime.onMessage.addListener((msg, _s, _r) => {
 
 function repaintAll() {
   cache.clear();
-  document.querySelectorAll(".moguru-done").forEach((el) => el.classList.remove("moguru-done"));
-  // unwrap existing spans so re-render starts from clean text nodes
+  // unwrap existing spans back into plain text, then re-scan
   document.querySelectorAll("span.moguru-tok").forEach((span) => {
     const parent = span.parentElement;
     if (!parent) return;
     parent.replaceChild(document.createTextNode(span.textContent), span);
     parent.normalize();
   });
-  scan();
+  document.querySelectorAll(".moguru-done").forEach((el) => el.classList.remove("moguru-done"));
+  if (enabled) scan();
 }
 
 function toggle() {
   enabled = !enabled;
   document.documentElement.classList.toggle("moguru-off", !enabled);
-  if (enabled) {
-    scan();
-  }
+  if (enabled) scan();
 }
 
 // ---------------------------------------------------------------------------
@@ -325,6 +358,8 @@ function showPanel(panel) {
       ans.textContent = panel.answer.slice(0, 1200);
       body.appendChild(ans);
     }
+  } else if (!panel.word) {
+    body.textContent = "右クリックする単語の上にカーソルを合わせてください（色のついた語）。";
   }
   el.appendChild(body);
   document.documentElement.appendChild(el);
@@ -351,6 +386,7 @@ function mountLegend() {
   el.innerHTML =
     '<span class="moguru-tok moguru-iplus">i+1</span> mine me · ' +
     '<span class="moguru-tok moguru-new_hard">new</span> too hard · ' +
+    '<span class="moguru-tok moguru-known_unstable">shaky</span> · ' +
     '<span style="opacity:.6">Alt+M toggle</span>';
   document.body.appendChild(el);
 }
