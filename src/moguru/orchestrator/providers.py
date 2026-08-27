@@ -301,7 +301,10 @@ def _list_models(endpoint: str, headers: dict[str, str],
     resp = requests.get(f"{endpoint}/models", headers=headers, timeout=timeout)
     resp.raise_for_status()
     data = resp.json().get("data", [])
-    return [m.get("id", "") for m in data]
+    # Google's OpenAI-compat layer lists ids with a "models/" prefix
+    # (models/gemini-3.1-pro-preview) while chat accepts the bare name —
+    # normalize so validation doesn't false-negative on Gemini
+    return [m.get("id", "").removeprefix("models/") for m in data]
 
 
 def validate_provider(provider: Provider, pull: bool = False,

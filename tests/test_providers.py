@@ -138,3 +138,20 @@ def test_validate_live_ollama(temp_config):
     )
     report = pm.validate_provider(provider)
     assert report["ok"] and report["local"] and report["latency_ms"] > 0
+
+
+def test_list_models_normalizes_google_prefix(monkeypatch):
+    """Google's OpenAI-compat /models lists ids as "models/<name>" while
+    chat accepts the bare name — validation must compare normalized ids."""
+    class FakeResp:
+        def raise_for_status(self):
+            pass
+
+        def json(self):
+            return {"data": [{"id": "models/gemini-3.1-pro-preview"},
+                             {"id": "local-model"}]}
+
+    monkeypatch.setattr(pm.requests, "get", lambda *a, **k: FakeResp())
+    ids = pm._list_models("https://x.example/v1", {})
+    assert "gemini-3.1-pro-preview" in ids
+    assert not any(i.startswith("models/") for i in ids)
