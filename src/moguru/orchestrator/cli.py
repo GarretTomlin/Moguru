@@ -226,6 +226,12 @@ def cmd_provider(args: argparse.Namespace) -> None:
     elif args.action == "remove":
         pm.remove_provider(args.provider_id, config)
         print(f"removed provider {args.provider_id!r}")
+    elif args.action == "set-model":
+        if not (args.provider_id and args.model):
+            raise SystemExit("provider set-model: <provider_id> --model <name> required")
+        provider = pm.set_provider_model(args.provider_id, args.model, config)
+        print(f"{provider.id} -> {provider.model} @ {provider.endpoint} "
+              "(takes effect on next request)")
     elif args.action == "list":
         providers = pm.load_providers(config)
         if not providers:
@@ -532,7 +538,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     # --- models & providers -------------------------------------------
     sp = sub.add_parser("provider", help="manage model providers")
-    sp.add_argument("action", choices=["add", "remove", "list"])
+    sp.add_argument("action", choices=["add", "remove", "set-model", "list"])
     sp.add_argument("provider_id", nargs="?", help="provider id")
     sp.add_argument("--endpoint", help="OpenAI-compatible base URL")
     sp.add_argument("--model", help="model name at the endpoint")

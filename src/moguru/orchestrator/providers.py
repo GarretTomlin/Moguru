@@ -169,6 +169,22 @@ def remove_provider(provider_id: str, config: Config | None = None) -> None:
     save_providers(remaining, config)
 
 
+def set_provider_model(provider_id: str, model: str,
+                       config: Config | None = None) -> Provider:
+    """Swap the model an existing provider serves — the daily driver for
+    "same endpoint, newer model" (gemini-3.1-flash-lite -> 3.7-flash, etc.).
+    Role bindings are untouched; the next request uses the new model."""
+    providers = load_providers(config)
+    for p in providers:
+        if p.id == provider_id:
+            p.model = model
+            save_providers(providers, config)
+            return p
+    raise ProviderError(
+        f"no provider with id {provider_id!r} — `moguru provider add` it first"
+    )
+
+
 def detect_runtime(endpoint: str) -> str:
     """Best-effort local-runtime detection so naming/hints follow whatever is
     actually running — the provider abstraction itself stays agnostic."""

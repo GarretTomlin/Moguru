@@ -188,3 +188,20 @@ def test_dotenv_fills_unset_only(tmp_path, monkeypatch):
     monkeypatch.setenv("GEMINI_API_KEY", "from-export")
     load_dotenv(envf)
     assert os.environ["GEMINI_API_KEY"] == "from-export"
+
+
+def test_set_provider_model_swaps_in_place(temp_config, monkeypatch):
+    monkeypatch.setenv("GEMINI_API_KEY", "k")
+    pm.add_provider(
+        pm.Provider(id="gemini", endpoint="", model="gemini-3.1-flash-lite",
+                    runtime="gemini"),
+        temp_config,
+    )
+    pm.set_provider_model("gemini", "gemini-3.7-flash", temp_config)
+    (p,) = [p for p in pm.load_providers(temp_config) if p.id == "gemini"]
+    assert p.model == "gemini-3.7-flash"
+    assert p.endpoint == ("https://generativelanguage.googleapis.com"
+                          "/v1beta/openai")  # endpoint/key untouched
+    with pytest.raises(pm.ProviderError, match="no provider"):
+        pm.set_provider_model("nope", "x", temp_config)
+    pm.remove_provider("gemini", temp_config)
