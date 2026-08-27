@@ -16,6 +16,10 @@ Runs on open-weight models. Your data never leaves your machine.
 
 > **Status:** building in the open.
 
+Point any coding agent at this repo and say **"install this."** It reads [`INSTALL.md`](./INSTALL.md), does the work, and reports back with a health check.
+
+Other paths live in [`docs/getting-started.md`](./docs/getting-started.md).
+
 Read the build spec → [`immersion-engine-spec.md`](./immersion-engine-spec.md)
 
 ---

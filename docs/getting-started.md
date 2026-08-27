@@ -2,7 +2,27 @@
 
 Everything technical lives here; the [README](../README.md) stays clean.
 
-## Install (clone → running)
+## Install — tell an agent
+
+The main path. Clone (or just point) any coding agent at this repo and say
+**"install this."**
+
+```
+you:    install this
+agent:  reads INSTALL.md → env → dictionaries → model → verify → reports
+```
+
+The agent follows [`INSTALL.md`](../INSTALL.md) — a plain, imperative recipe
+with no credentials to broker — and finishes with `moguru doctor`, so its
+report ends in either every-line-PASS or the exact failing check. Local-first:
+no API keys, no OAuth, no accounts at any step.
+
+When it's done: `moguru chat` to talk to the engine, `moguru serve` before
+using the [Reader extension](../surfaces/reader/README.md).
+
+## Manual install (for the technical)
+
+Prefer doing it by hand? Same steps the agent runs:
 
 ```bash
 git clone https://github.com/GarretTomlin/Moguru.git && cd Moguru
@@ -13,16 +33,14 @@ uv run moguru model wizard             # bind your model (detects a running Olla
 uv run moguru doctor                   # every line should say PASS
 ```
 
+Or the one-liner bootstrap (idempotent): `./install.sh`.
+
 Prerequisites: [uv](https://astral.sh/uv), a model runtime (Ollama / LM
 Studio — any OpenAI-compatible endpoint), and — for the Anki path —
 [Anki](https://apps.ankiweb.net) with the
 [AnkiConnect](https://ankiweb.net/shared/info/2055492159) add-on (code
-`2055492159`) running.
-
-No API keys, no accounts. Dictionaries are fetched at install time and never
-committed (see [LICENSE](../LICENSE) for data attribution). You can also hand
-the whole folder to an agent and say *"install this"* — it follows
-[INSTALL.md](../INSTALL.md).
+`2055492159`) running. Dictionaries are fetched at install time and never
+committed (see [LICENSE](../LICENSE) for data attribution).
 
 ## The Reader (browser extension)
 
