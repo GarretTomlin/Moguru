@@ -1,0 +1,42 @@
+[project]
+name = "moguru"
+version = "0.1.0"
+description = "潜る Moguru — a local, model-driven Japanese immersion engine (AJATT / MIA / Migaku philosophy)"
+readme = "README.md"
+requires-python = ">=3.12,<3.14"
+dependencies = [
+    "mcp>=1.2.0,<2",        # official MCP SDK v1 (FastMCP servers + stdio client)
+    "fugashi>=1.3.0",      # MeCab wrapper (macOS arm64 wheels)
+    "unidic>=1.1.0",       # UniDic dictionary (lemma, reading, pitch accent)
+    "sudachipy>=0.6.8",    # alternate parser engine
+    "sudachidict-core>=20250115",  # Sudachi dictionary data
+    "jaconv>=0.3.4",       # kana/romaji conversion
+    "pysubs2>=1.6.1",      # .srt / .ass subtitle parsing
+    "fsrs>=4.0.0",         # FSRS scheduler (builtin SRS backend)
+    "requests>=2.31.0",    # downloads + AnkiConnect
+    "PyYAML>=6.0",
+]
+
+[project.optional-dependencies]
+ocr = [
+    "manga-ocr>=0.1.11",   # heavy (torch); install with: uv sync --extra ocr
+]
+dev = [
+    "pytest>=8.0.0",
+]
+
+[project.scripts]
+moguru = "moguru.orchestrator.cli:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/moguru"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "integration: requires built dictionary data (run after `moguru data download`)",
+]

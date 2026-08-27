@@ -1,0 +1,60 @@
+# 潜る Moguru — configuration (spec §1)
+# Every model-specific behavior sits behind an OpenAI-compatible endpoint;
+# swapping models requires zero changes to tools or skills.
+
+model:
+  local:
+    endpoint: http://localhost:11434/v1     # Ollama (OpenAI-compatible)
+    # Spec default is `qwen3.6-27b`; this machine has the 27B Qwen pulled
+    # under the tag below (tool-calling, 262k ctx). Swap freely.
+    name: orcarouter/Qwen3.8-27B-Uncensored:latest
+    # Fallbacks present on this machine: qwen2.5:14b, gemma4:latest
+  strong:
+    endpoint: ~                            # unset — optional route for hard grammar reasoning
+    name: ~
+  routing: local_first                     # local_only | local_first | strong_only
+  # Phase 3 — dedicated small model for the comprehension shadow layer.
+  # Inert until shadow-mcp exists (spec §3.7).
+  shadow:
+    endpoint: http://localhost:11435/v1
+    name: qwen3-8b
+
+parser:
+  engine: mecab_unidic                     # mecab_unidic (fugashi) | sudachi | ichiran
+
+srs:
+  backend: anki                           # anki (AnkiConnect) | builtin (FSRS) | none
+  # AnkiConnect (:8765) is installed and running — cards land in real Anki.
+  # Flip back to `builtin` for a self-contained FSRS store any time.
+
+mining:
+  iplus_threshold: 1                       # max unknown content words for an i+1 candidate
+  sentence_len: [4, 25]                    # min/max tokens for a minable sentence
+
+defs:
+  mode: bilingual                          # bilingual | mixed | monolingual (transition policy)
+
+shadow:
+  min_samples: 4                           # encounters before an estimate is
+                                           # reported as non-low-confidence
+  decay_half_life_days: 120                # evidence decay without exposure
+  calibration_window: 500                  # recent predictions scored (Brier)
+  weights:                                 # §4 evidence strengths — the
+    lookup: 2.0                            # calibration tuning knobs
+    hover: 2.0
+    mine: 2.5
+    rewind: 1.0
+    replay: 1.0
+    pause: 0.3
+    skip: 0.1
+    complete: 0.3
+
+paths:
+  # Relative to the repo root; override to relocate.
+  dictionaries: data/dictionaries
+  user: data/user
+
+anki:
+  connect_url: http://localhost:8765
+  deck: "Moguru 日本語"                     # deck used by the anki backend
+  mature_interval_days: 21                 # card counts as "known" at this interval

@@ -1,0 +1,63 @@
+{
+  "name": "moguru",
+  "version": "0.1.0",
+  "servers": [
+    {
+      "id": "parser",
+      "command": "python",
+      "args": ["-m", "moguru.mcp.parser_mcp.server"],
+      "health": { "tool": "tokenize", "args": { "text": "魚" } }
+    },
+    {
+      "id": "dict",
+      "command": "python",
+      "args": ["-m", "moguru.mcp.dict_mcp.server"],
+      "health": { "tool": "lookup_kanji", "args": { "char": "魚" } }
+    },
+    {
+      "id": "freq",
+      "command": "python",
+      "args": ["-m", "moguru.mcp.freq_mcp.server"],
+      "health": { "tool": "frequency", "args": { "lemma": "水" } }
+    },
+    {
+      "id": "kb",
+      "command": "python",
+      "args": ["-m", "moguru.mcp.kb_mcp.server"],
+      "health": { "tool": "stats", "args": {} }
+    },
+    {
+      "id": "srs",
+      "command": "python",
+      "args": ["-m", "moguru.mcp.srs_mcp.server"],
+      "health": { "tool": "find_notes", "args": { "query": "" } },
+      "config": { "backend": "anki" }
+    },
+    {
+      "id": "media",
+      "command": "python",
+      "args": ["-m", "moguru.mcp.media_mcp.server"],
+      "health": null
+    },
+    {
+      "id": "shadow",
+      "command": "python",
+      "args": ["-m", "moguru.mcp.shadow_mcp.server"],
+      "health": { "tool": "calibration", "args": {} }
+    }
+  ],
+  "data": [
+    { "id": "jmdict",     "url": "https://www.edrdg.org/pub/Nihongo/JMdict_e.gz",      "dest": "data/dictionaries/JMdict_e.gz" },
+    { "id": "jmnedict",   "url": "https://www.edrdg.org/pub/Nihongo/JMnedict.xml.gz",  "dest": "data/dictionaries/JMnedict.xml.gz" },
+    { "id": "kanjidic2",  "url": "https://www.edrdg.org/pub/Nihongo/kanjidic2.xml.gz", "dest": "data/dictionaries/kanjidic2.xml.gz" },
+    { "id": "kradzip",    "url": "https://www.edrdg.org/pub/Nihongo/kradzip.zip",      "dest": "data/dictionaries/kradzip.zip" },
+    { "id": "kanjium",    "url": "https://raw.githubusercontent.com/mifunetoshiro/kanjium/master/data/source_files/raw/accents.txt", "dest": "data/dictionaries/accents.txt" },
+    { "id": "jpdb-freq",  "url": "https://github.com/Kuuuube/yomitan-dictionaries/releases/download/yomitan-permalink/JPDB_v2.2_Frequency_Kana.zip", "dest": "data/dictionaries/JPDB_v2.2_Frequency_Kana.zip" },
+    { "id": "bccwj-freq", "url": "https://github.com/Kuuuube/yomitan-dictionaries/releases/download/yomitan-permalink/BCCWJ_SUW_LUW_combined.zip", "dest": "data/dictionaries/BCCWJ_SUW_LUW_combined.zip" }
+  ],
+  "models": [
+    { "role": "main",   "name": "orcarouter/Qwen3.8-27B-Uncensored:latest", "runtime": "ollama", "endpoint": "http://localhost:11434/v1" },
+    { "role": "shadow", "name": "qwen3-8b", "runtime": "ollama", "endpoint": "http://localhost:11435/v1", "optional": true }
+  ],
+  "hosts": ["generic", "claude-desktop", "cursor", "openclaw"]
+}

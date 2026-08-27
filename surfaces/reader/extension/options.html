@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Moguru Reader — options</title>
+  <style>
+    body { font: 14px/1.6 system-ui, sans-serif; width: 380px; padding: 14px; }
+    h1 { font-size: 16px; margin: 0 0 10px; }
+    label { display: block; margin: 10px 0 4px; font-weight: 600; }
+    input[type=text] { width: 100%; box-sizing: border-box; padding: 4px 6px; }
+    .row { display: flex; gap: 10px; align-items: center; }
+    .swatch { width: 44px; height: 24px; border: none; background: none; cursor: pointer; }
+    #status { margin-top: 12px; color: #16a34a; min-height: 1em; }
+    .hint { color: #666; font-size: 12px; }
+  </style>
+</head>
+<body>
+  <h1>潜る Moguru Reader</h1>
+
+  <label>Engine URL <span class="hint">(start it with <code>moguru serve</code>)</span></label>
+  <input type="text" id="engineUrl" placeholder="http://localhost:8766">
+
+  <label>
+    <input type="checkbox" id="enabled" checked> Highlight pages (Alt+M toggles per page)
+  </label>
+
+  <label>Band colors</label>
+  <div class="row">
+    <span class="hint">i+1</span>
+    <input type="color" class="swatch" id="iplusColor" value="#4ade80">
+    <span class="hint">new/hard</span>
+    <input type="color" class="swatch" id="hardColor" value="#fbbf24">
+  </div>
+
+  <label>Open a PDF</label>
+  <button id="openReader">Moguru PDF reader…</button>
+
+  <div id="status"></div>
+
+  <script src="options.js"></script>
+</body>
+</html>

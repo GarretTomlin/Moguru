@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>潜る Moguru PDF Reader</title>
+  <link rel="stylesheet" href="content.css">
+  <style>
+    body { font: 14px/1.6 system-ui, sans-serif; margin: 0; background: #3c4148; }
+    #toolbar {
+      position: sticky; top: 0; z-index: 10; background: #26292e; color: #eee;
+      padding: 8px 14px; display: flex; gap: 12px; align-items: center;
+    }
+    #toolbar button { background: #3c4148; color: #eee; border: 1px solid #555;
+      border-radius: 6px; padding: 4px 10px; cursor: pointer; }
+    #pages { max-width: 900px; margin: 0 auto; padding: 16px; }
+    .page { background: white; margin: 0 auto 18px; position: relative;
+      box-shadow: 0 2px 12px rgba(0,0,0,.4); }
+    .page canvas { display: block; }
+    .page .textLayer { position: absolute; inset: 0; overflow: hidden;
+      line-height: 1; text-align: initial; }
+    /* pdf.js text layer spans; moguru bands ride on top */
+    .page .textLayer span { position: absolute; white-space: pre;
+      transform-origin: 0 0; color: transparent; cursor: default; }
+    .page .textLayer span.moguru-iplus, .page .textLayer span.moguru-new_hard {
+      border-radius: 2px;
+    }
+  </style>
+</head>
+<body>
+  <div id="toolbar">
+    <b>潜る PDF reader</b>
+    <input type="file" id="file" accept="application/pdf">
+    <button id="toggle">toggle bands (Alt+M)</button>
+    <span id="hint" style="opacity:.7; font-size:12px">
+      right-click a word: explain / send to Anki / mark known
+    </span>
+  </div>
+  <div id="pages"></div>
+  <script type="module" src="reader.js"></script>
+</body>
+</html>

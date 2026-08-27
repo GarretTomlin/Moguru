@@ -1,0 +1,22 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Dictionary data — downloaded at install time (`moguru data download`),
+# never shipped in the repo (~400 MB; see README "Data & licenses")
+data/dictionaries/
+
+# User state — the learner's private knowledge store, shadow signals,
+# provider bindings. Never synced, never uploaded (spec §3.7).
+data/user/
+
+# macOS / editor noise
+.DS_Store
+*.swp
+.idea/
+.vscode/
+
+# Local service logs
+*.log

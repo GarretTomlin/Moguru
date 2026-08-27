@@ -1,0 +1,13 @@
+{
+  "name": "wanikani-radicals",
+  "type": "mcp",
+  "version": "0.1.0",
+  "entry": "server.py",
+  "tools": [
+    {
+      "name": "wk_radical_meaning",
+      "description": "WaniKani-style mnemonic meaning for a radical (demo plugin; returns a static table lookup, NOT ground truth)"
+    }
+  ],
+  "provides_ground_truth": false
+}

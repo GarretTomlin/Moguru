@@ -1,0 +1,91 @@
+/* Moguru Reader — band styles. Colors overridable via options (injected as
+   CSS variables on :root by options.js sync). */
+
+:root {
+  --moguru-iplus-bg: rgba(74, 222, 128, 0.28);   /* green */
+  --moguru-iplus-underline: #16a34a;
+  --moguru-hard-bg: rgba(251, 191, 36, 0.30);    /* amber */
+  --moguru-hard-underline: #d97706;
+}
+
+html.moguru-off .moguru-tok,
+html.moguru-off .moguru-legend {
+  display: none !important;
+}
+
+.moguru-tok {
+  border-radius: 3px;
+  cursor: context-menu;
+}
+.moguru-iplus {
+  background: var(--moguru-iplus-bg);
+  border-bottom: 2px solid var(--moguru-iplus-underline);
+}
+.moguru-new_hard {
+  background: var(--moguru-hard-bg);
+  border-bottom: 2px dotted var(--moguru-hard-underline);
+}
+.moguru-known { /* clean page: known words unstyled */ }
+.moguru-known_unstable {
+  /* paper-known but behaviorally shaky (shadow model) — subtle dotted marker
+     so false-known words surface while you read (Reader spec §2 hook) */
+  border-bottom: 2px dotted #8b5cf6;
+  background: rgba(139, 92, 246, 0.12);
+}
+
+.moguru-legend {
+  position: fixed;
+  bottom: 8px;
+  right: 8px;
+  z-index: 2147483000;
+  font: 12px/1.6 sans-serif;
+  background: rgba(20, 20, 20, 0.85);
+  color: #eee;
+  padding: 4px 10px;
+  border-radius: 8px;
+  pointer-events: none;
+}
+
+.moguru-panel {
+  position: fixed;
+  bottom: 40px;
+  right: 8px;
+  z-index: 2147483600;
+  width: min(420px, 90vw);
+  max-height: 45vh;
+  overflow: auto;
+  background: #101418;
+  color: #e8eaed;
+  font: 14px/1.6 sans-serif;
+  border: 1px solid #2a3340;
+  border-radius: 10px;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.5);
+}
+.moguru-panel-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  font-weight: 600;
+  border-bottom: 1px solid #2a3340;
+}
+.moguru-panel-head button {
+  background: none;
+  border: none;
+  color: #9aa4b2;
+  font-size: 16px;
+  cursor: pointer;
+}
+.moguru-panel-body {
+  padding: 10px 12px;
+}
+.moguru-panel-body b {
+  color: #8ab4f8;
+  margin-right: 4px;
+}
+.moguru-panel-ans {
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px dashed #2a3340;
+  white-space: pre-wrap;
+}
