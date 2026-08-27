@@ -22,16 +22,19 @@
        spans get COLOR of their own — the text layer renders the colored
        glyphs precisely over the canvas ones (color the text, not a box). */
     .page .textLayer span { position: absolute; white-space: pre;
-      transform-origin: 0 0; color: transparent; cursor: default; }
-    .page .textLayer span.moguru-iplus { color: var(--moguru-iplus-color); }
-    .page .textLayer span.moguru-new_hard { color: var(--moguru-hard-color); }
-    .page .textLayer span.moguru-known_unstable { color: var(--moguru-unstable-color); }
-    /* thicken the colored glyphs so they fully cover the black canvas ones */
-    .page .textLayer span.moguru-iplus,
-    .page .textLayer span.moguru-new_hard,
+      transform-origin: 0 0; color: transparent; cursor: default;
+      line-height: 1; }
+    /* PDF glyphs are burnt-in canvas pixels — they cannot be recolored
+       reliably (font substitution drifts = ghost copies). Bands render as
+       colored underlines pinned to the PDF's declared run geometry instead:
+       font-independent, ghost-proof. Web pages keep colored text. */
+    .page .textLayer span.moguru-tok {
+      border-bottom: 3px solid var(--moguru-hard-color);
+    }
+    .page .textLayer span.moguru-iplus { border-bottom-color: var(--moguru-iplus-color); }
+    .page .textLayer span.moguru-new_hard { border-bottom-color: var(--moguru-hard-color); }
     .page .textLayer span.moguru-known_unstable {
-      -webkit-text-stroke: 0.45px currentcolor;
-      paint-order: stroke fill;
+      border-bottom: 3px dotted var(--moguru-unstable-color);
     }
     .page .textLayer span[data-furigana] { pointer-events: none; }
     .moguru-pop { position: fixed; }

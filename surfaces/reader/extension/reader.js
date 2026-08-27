@@ -68,11 +68,10 @@ async function renderPage(pdf, pageNum) {
      itemTop(i) > viewport.height * 0.94);
   const bodyItems = items.filter((i) => !isFurigana(i) && !isPageFurniture(i));
 
-  // Manual text layer with the official viewer's alignment trick: after
-  // laying out each span (embedded fontFamily when available), MEASURE it
-  // and scale to the item's declared width. That is what makes colored
-  // glyphs sit precisely on the canvas glyphs — no offset ghost copy —
-  // without depending on pdf.js internals.
+  // Manual text layer. Text stays transparent (selection only); banding is
+  // drawn as a colored UNDERLINE pinned to the PDF's declared run box —
+  // geometry from the PDF itself, independent of font substitution, so it
+  // can never render as an offset duplicate of the glyphs.
   const pageSpans = [];
   for (const item of items) {
     const span = document.createElement("span");
@@ -84,33 +83,31 @@ async function renderPage(pdf, pageNum) {
     span.style.top = `${tx[5] - fontHeight}px`;
     span.style.fontSize = `${fontHeight}px`;
     if (item.fontName) span.style.fontFamily = item.fontName;
-    if (angle) span.dataset.angle = angle;
-    textLayer.appendChild(span);
-
-    // fit-to-width: scale the rendered run to the PDF's declared width.
-    // item.width's unit convention varies; pick whichever candidate ratio
-    // is sane.
+    if (angle) span.style.transform = `rotate(${angle}rad)`;
+    // pin the run's width to the PDF-declared extent (unit convention
+    // varies across producers — accept whichever sane ratio fits)
     const measured = span.getBoundingClientRect().width;
     if (measured > 0 && item.width > 0) {
-      for (const expected of [item.width * viewport.scale, item.width]) {
-        const sx = expected / measured;
-        if (sx >= 0.6 && sx <= 1.67) {
-          span.style.transform =
-            (angle ? `rotate(${angle}rad) ` : "") + `scaleX(${sx})`;
+      for (const w of [item.width * viewport.scale, item.width]) {
+        const r = w / measured;
+        if (r >= 0.6 && r <= 1.67) {
+          span.style.width = `${w}px`;
           break;
         }
       }
     }
+    textLayer.appendChild(span);
     pageSpans.push(span);
   }
 
-  // zip spans with the FULL items array (same order), mark excluded runs,
-  // and build the body-span list the band offsets will map onto.
+  // zip spans against the SAME filtered `items` list they were built from
+  // (walking the unfiltered list desynced bands whenever whitespace-only
+  // items appeared — bands landed on the wrong runs, wrong lemma in the
+  // action card, Anki "no candidate").
   const spanByItem = new Map();
-  const fullItems = textContent.items;
-  for (let k = 0; k < pageSpans.length && k < fullItems.length; k++) {
-    spanByItem.set(fullItems[k], pageSpans[k]);
-    if (isFurigana(fullItems[k]) || isPageFurniture(fullItems[k])) {
+  for (let k = 0; k < pageSpans.length; k++) {
+    spanByItem.set(items[k], pageSpans[k]);
+    if (isFurigana(items[k]) || isPageFurniture(items[k])) {
       pageSpans[k].dataset.furigana = "1";
     }
   }
