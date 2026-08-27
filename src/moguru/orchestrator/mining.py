@@ -8,6 +8,7 @@ one target word each.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -17,6 +18,8 @@ from moguru.mcp.dict_mcp import core as dict_core
 from moguru.mcp.freq_mcp import core as freq_core
 from moguru.mcp.kb_mcp import core as kb_core
 from moguru.mcp.parser_mcp import core as parser_core
+
+_CJK = "\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff"
 
 # Canonical note fields (spec §4.5) — every card-producing path uses these.
 CARD_FIELDS = [
@@ -137,10 +140,25 @@ def build_card_fields(candidate: Candidate, config: Config | None = None,
     config = config or cfgmod.Config.load()
     media = media or {}
     fields: dict[str, str] = {k: "" for k in CARD_FIELDS}
-    fields["Sentence"] = candidate.sentence
+    # bold/segment by the SURFACE form — the lemma (食べる) never appears in
+    # an inflected sentence (食べた); the candidate's own tokens carry it
+    target = candidate.target
+    surface = target
+    toks = candidate.tokens or []
+    for i, t in enumerate(toks):
+        if t.get("lemma") == target and t.get("surface"):
+            surface = t["surface"]
+            # conjugation auxiliaries belong to the word form (食べ + た →
+            # 食べた); particles (を/が) never do
+            for nxt in toks[i + 1:]:
+                if nxt.get("pos") == "助動詞" and nxt.get("surface"):
+                    surface += nxt["surface"]
+                else:
+                    break
+            break
+    fields["Sentence"] = _prepare_sentence(candidate.sentence, surface)
     fields["Source"] = media.get("source", "text")
 
-    target = candidate.target
     if not target:
         return fields  # review/known-good sentence card: sentence + source only
 
@@ -153,7 +171,9 @@ def build_card_fields(candidate: Candidate, config: Config | None = None,
         readings = first["readings"] or []
         reading = readings[0] if readings else (candidate.target_reading or "")
         fields["Reading"] = reading
-        fields["Definition"] = _render_definition(target, first, config)
+        fields["Definition"] = _render_definition(
+            target, first, config, sentence=fields["Sentence"],
+        )
     elif candidate.target_reading:
         fields["Reading"] = candidate.target_reading
 
@@ -172,13 +192,70 @@ def build_card_fields(candidate: Candidate, config: Config | None = None,
     return fields
 
 
+_CJK = "\u3000-\u30ff\u3400-\u4dbf\u4e00-\u9fff"  # kana, CJK punct (。『』、), kanji
+
+
+def _prepare_sentence(sentence: str, target: str) -> str:
+    """Migaku/MIA card discipline: ONE clean sentence, target in situ.
+
+    PDF text layers and span-wrapped web pages inject whitespace between
+    every glyph — collapse it (real Latin spacing survives). Then trim to
+    the single sentence containing the target, and bold the target so the
+    card reads as one i+1 fact, not a paragraph.
+    """
+    text = re.sub(rf"(?<=[{_CJK}])\s+(?=[{_CJK}])", "", sentence or "")
+    text = re.sub(r"\s+", " ", text).strip()
+    if target:
+        for seg in re.split(r"(?<=[。！？!?])", text):
+            if target in seg:
+                text = seg.strip()
+                break
+        if target in text:
+            text = text.replace(target, f"<b>{target}</b>", 1)
+    return text
+
+
+def _pick_sense_index(target: str, sentence: str, senses: list[dict],
+                      config: Config) -> int:
+    """Which JMdict sense fits THIS sentence — the main model answers with a
+    NUMBER only. The definition text itself never comes from model memory
+    (build_card_fields contract); the model just points at ground truth.
+    Best-effort: unreachable model / gibberish -> sense 0."""
+    if len(senses) <= 1:
+        return 0
+    lines = [
+        f"{i}: {'; '.join(s.get('gloss', [])[:4])[:120]}"
+        for i, s in enumerate(senses)
+    ]
+    prompt = (
+        f"次の文脈で単語「{target}」に最も当てはまる意味の番号だけを返してください。\n"
+        f"文: {sentence}\n意味:\n" + "\n".join(lines) +
+        "\n答えは番号のみ（例: 2）。"
+    )
+    try:
+        from moguru.orchestrator.agent import ModelRouter
+
+        resp = ModelRouter(config).chat(
+            [{"role": "user", "content": prompt}], max_tokens=8,
+        )
+        content = resp["choices"][0]["message"].get("content") or ""
+        m = re.search(r"\d+", content)
+        idx = int(m.group()) if m else 0
+        return idx if 0 <= idx < len(senses) else 0
+    except Exception:
+        return 0
+
+
 def _render_definition(target: str, entry: dict[str, Any],
-                       config: Config) -> str:
-    """defs.mode transition policy (bilingual | mixed | monolingual)."""
+                       config: Config, sentence: str = "") -> str:
+    """defs.mode transition policy (bilingual | mixed | monolingual), with
+    Migaku-style context selection: the ONE sense fitting the sentence, not
+    the whole dictionary entry dumped onto the card."""
     mode = config.defs_mode
-    bilingual = "; ".join(
-        g for s in entry["senses"] for g in s["gloss"]
-    )[:500]
+    senses = entry.get("senses") or []
+    idx = _pick_sense_index(target, sentence, senses, config) if sentence else 0
+    chosen = senses[idx] if 0 <= idx < len(senses) else (senses[0] if senses else None)
+    bilingual = "; ".join((chosen or {}).get("gloss", []))[:300]
     if mode == "bilingual":
         return bilingual
     jj = ""
@@ -186,7 +263,7 @@ def _render_definition(target: str, entry: dict[str, Any],
         try:
             mono = dict_core.lookup_monolingual(target)
             if mono:
-                jj = mono[0]["definition"][:500]
+                jj = mono[0]["definition"][:300]
         except (FileNotFoundError, Exception):
             jj = ""
     if mode == "monolingual":

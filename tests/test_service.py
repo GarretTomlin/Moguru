@@ -60,7 +60,7 @@ def test_mine_with_target_is_authoritative(client, temp_config):
     item = r.json()["results"][0]
     assert item["candidate"]["target"] == "雨"
     assert item["fields"]["TargetWord"] == "雨"
-    assert item["fields"]["Sentence"] == sentence
+    assert item["fields"]["Sentence"] == "明日は<b>雨</b>が降るでしょう。"
     assert "あめ" in item["fields"]["Reading"]
     # …and it can still be added on request
     r2 = client.post("/mine", json={"text": sentence, "target": "雨", "add": True})

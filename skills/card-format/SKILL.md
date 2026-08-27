@@ -16,10 +16,10 @@ Fields: Sentence, TargetWord, Reading, Definition, Audio, Image, PitchAccent, So
 
 | Field | Content | Source of truth |
 |---|---|---|
-| Sentence | The full i+1 sentence, target word in situ | the immersion text |
+| Sentence | The single i+1 sentence (not a paragraph), cleaned, with the target word **bolded** in situ (surface form incl. okurigana/auxiliaries — 食べた, never particles) | the immersion text |
 | TargetWord | The single unknown lemma being mined | parser lemma |
 | Reading | Kana reading of the target word | JMdict readings / parser reading_kana |
-| Definition | Gloss per current `defs.mode` policy | dict.lookup_word / lookup_monolingual |
+| Definition | The ONE sense fitting the sentence (main model picks the sense *number*; text stays ground truth) — never the whole entry dumped. Monolingual policy per `defs.mode` still applies | dict.lookup_word / lookup_monolingual |
 | Audio | Sentence audio clip path (if from media) | media.extract_audio |
 | Image | Context screenshot (if from media) | media.capture_context |
 | PitchAccent | Reading with accent nucleus, e.g. `たべる [0]` | dict.lookup_pitch (kanjium) |
