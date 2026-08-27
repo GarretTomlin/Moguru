@@ -152,16 +152,25 @@ def record_signal(signal: dict[str, Any], config: Config | None = None) -> dict[
     finally:
         conn.close()
 
-    # opportunistic small-model flush when the ambiguous queue grows
+    # opportunistic small-model flush when the ambiguous queue grows —
+    # ASYNC, never blocking the caller (mining/mark must stay instant)
     pending = _pending_count(config)
     if pending >= 8:
-        try:
-            interpret_pending(config=config)
-        except Exception:
-            pass  # queue persists; stat core unaffected
+        import threading
+
+        threading.Thread(
+            target=_safe_interpret, args=(config,), daemon=True
+        ).start()
 
     return {"accepted": True, "keys_touched": [k for k, _ in keys],
             "signal_id": signal_id}
+
+
+def _safe_interpret(config: Config) -> None:
+    try:
+        interpret_pending(config=config)
+    except Exception:
+        pass  # queue persists; stat core unaffected
 
 
 def _apply_evidence(conn: sqlite3.Connection, key: str, kind: str,
@@ -496,7 +505,8 @@ def _try_shadow_client(config: Config):
 
     try:
         provider, headers = pm.resolve_role("shadow", config)
-        return pm.ProviderClient(provider, headers, timeout=120)
+        # shadow inference is background work — never let it hold a request
+        return pm.ProviderClient(provider, headers, timeout=90)
     except Exception:
         return None
 

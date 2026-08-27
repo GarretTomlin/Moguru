@@ -148,6 +148,7 @@ async function bumpAndBroadcast() {
 // ---------------------------------------------------------------------------
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+  console.log("[moguru] ⇠", msg?.type, msg?.word || msg?.lemma || "");
   (async () => {
     try {
       if (msg.type === "moguru:annotate") {

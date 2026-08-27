@@ -333,10 +333,17 @@ function openPop(tok) {
   btn("説明 explain", async (e) => {
     e.target.disabled = true;
     body.style.display = "block";
-    body.textContent = "…";
+    const t0 = Date.now();
+    body.textContent = "… 考え中";
+    const tick = setInterval(() => {
+      body.textContent = `… 考え中 ${Math.round((Date.now() - t0) / 1000)}s`;
+    }, 1000);
+    try {
     const r = await send({ type: "moguru:explain", word, sentence, lemma });
+    clearInterval(tick);
     body.textContent = "";
     if (!r || !r.ok) { body.textContent = `⚠ ${r?.error || "engine unreachable"}`; return; }
+    } catch (e) { clearInterval(tick); body.textContent = `⚠ ${e}`; }
     const toks = r.entries?.tokens || [];
     const t = toks.find((t) => t.lemma) || {};
     appendKv(body, "reading", t.reading_kana || "");
@@ -355,8 +362,9 @@ function openPop(tok) {
   });
   btn("Anki", async (e) => {
     e.target.disabled = true;
-    const r = await send({ type: "moguru:mine", text: sentence, target: lemma, add: true });
     body.style.display = "block";
+    body.textContent = "… 追加中";
+    const r = await send({ type: "moguru:mine", text: sentence, target: lemma, add: true });
     body.textContent = "";
     if (!r || !r.ok) { body.textContent = `⚠ ${r?.error || "engine unreachable"}`; return; }
     const item = (r.data.results || [])[0];
