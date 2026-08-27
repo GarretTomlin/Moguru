@@ -355,26 +355,37 @@ function openPop(tok) {
     const tick = setInterval(() => {
       body.textContent = `… 考え中 ${Math.round((Date.now() - t0) / 1000)}s`;
     }, 1000);
+    // whole flow inside one try: `r` scoped here, rendering included —
+    // a ReferenceError after body.textContent = "" reads as a blank card
     try {
-    const r = await send({ type: "moguru:explain", word, sentence, lemma });
-    clearInterval(tick);
-    body.textContent = "";
-    if (!r || !r.ok) { body.textContent = `⚠ ${r?.error || "engine unreachable"}`; return; }
-    } catch (e) { clearInterval(tick); body.textContent = `⚠ ${e}`; }
-    const toks = r.entries?.tokens || [];
-    const t = toks.find((t) => t.lemma) || {};
-    appendKv(body, "reading", t.reading_kana || "");
-    for (const [l, es] of Object.entries(r.entries?.entries || {})) {
-      for (const en of es.slice(0, 1)) {
-        const gloss = (en.senses || []).flatMap((s) => s.gloss || []).slice(0, 3).join("; ");
-        appendKv(body, "JMdict", `${l}: ${gloss}`);
+      const r = await send({ type: "moguru:explain", word, sentence, lemma });
+      clearInterval(tick);
+      body.textContent = "";
+      if (!r || !r.ok) {
+        body.textContent = `⚠ ${r?.error || "engine unreachable"}`;
+        return;
       }
-    }
-    if (r.answer) {
-      const ans = document.createElement("div");
-      ans.style.marginTop = "6px";
-      ans.textContent = r.answer.slice(0, 900);
-      body.appendChild(ans);
+      const toks = r.entries?.tokens || [];
+      const t = toks.find((t) => t.lemma) || {};
+      appendKv(body, "reading", t.reading_kana || "");
+      for (const [l, es] of Object.entries(r.entries?.entries || {})) {
+        for (const en of es.slice(0, 1)) {
+          const gloss = (en.senses || []).flatMap((s) => s.gloss || []).slice(0, 3).join("; ");
+          appendKv(body, "JMdict", `${l}: ${gloss}`);
+        }
+      }
+      if (r.answer) {
+        const ans = document.createElement("div");
+        ans.style.marginTop = "6px";
+        ans.textContent = r.answer.slice(0, 900);
+        body.appendChild(ans);
+      }
+      if (!body.childNodes.length) {
+        body.textContent = "⚠ empty answer — click again";
+      }
+    } catch (e) {
+      clearInterval(tick);
+      body.textContent = `⚠ ${e}`;
     }
   });
   btn("Anki", async (e) => {

@@ -422,22 +422,34 @@ function openPop(tok) {
   };
   btn("説明 explain", async (e) => {
     e.target.disabled = true;
-    body.style.display = "block"; body.textContent = "…";
-    const r2 = await send({ type: "moguru:explain", word, sentence, lemma });
-    body.textContent = "";
-    if (!r2 || !r2.ok) { body.textContent = `⚠ ${r2?.error || "unreachable"}`; return; }
-    const toks = r2.entries?.tokens || [];
-    const t = toks.find((t) => t.lemma) || {};
-    body.append(kvDiv("reading", t.reading_kana || ""));
-    for (const [l, es] of Object.entries(r2.entries?.entries || {})) {
-      const gloss = (es[0]?.senses || []).flatMap((s) => s.gloss || []).slice(0, 3).join("; ");
-      body.append(kvDiv("JMdict", `${l}: ${gloss}`));
-    }
-    if (r2.answer) {
-      const ans = document.createElement("div");
-      ans.style.marginTop = "6px";
-      ans.textContent = r2.answer.slice(0, 900);
-      body.appendChild(ans);
+    body.style.display = "block";
+    const t0 = Date.now();
+    body.textContent = "… 考え中";
+    const tick = setInterval(() => {
+      body.textContent = `… 考え中 ${Math.round((Date.now() - t0) / 1000)}s`;
+    }, 1000);
+    try {
+      const r2 = await send({ type: "moguru:explain", word, sentence, lemma });
+      clearInterval(tick);
+      body.textContent = "";
+      if (!r2 || !r2.ok) { body.textContent = `⚠ ${r2?.error || "unreachable"}`; return; }
+      const toks = r2.entries?.tokens || [];
+      const t = toks.find((t) => t.lemma) || {};
+      body.append(kvDiv("reading", t.reading_kana || ""));
+      for (const [l, es] of Object.entries(r2.entries?.entries || {})) {
+        const gloss = (es[0]?.senses || []).flatMap((s) => s.gloss || []).slice(0, 3).join("; ");
+        body.append(kvDiv("JMdict", `${l}: ${gloss}`));
+      }
+      if (r2.answer) {
+        const ans = document.createElement("div");
+        ans.style.marginTop = "6px";
+        ans.textContent = r2.answer.slice(0, 900);
+        body.appendChild(ans);
+      }
+      if (!body.childNodes.length) body.textContent = "⚠ empty answer — click again";
+    } catch (err) {
+      clearInterval(tick);
+      body.textContent = `⚠ ${err}`;
     }
   });
   btn("Anki", async (e) => {

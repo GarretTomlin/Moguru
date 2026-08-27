@@ -285,6 +285,14 @@ async def ask(request: Request) -> JSONResponse:
             messages.append({"role": "user", "content": "（続けてください。）"})
     except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=502)
+    if not answer:
+        # never return a silent empty answer — the popover shows a blank
+        # card and the learner has no idea what happened
+        return JSONResponse(
+            {"error": "model returned an empty answer "
+                      "(thinking budget exhausted) — retry"},
+            status_code=502,
+        )
     return JSONResponse({"answer": answer, "grounded": bool(grounding)})
 
 
