@@ -57,7 +57,16 @@ async function renderPage(pdf, pageNum) {
   const heights = items.map(itemHeight).filter((h) => h > 0).sort((a, b) => a - b);
   const medianH = heights.length ? heights[Math.floor(heights.length / 2)] : 0;
   const isFurigana = (i) => medianH > 0 && itemHeight(i) < medianH * 0.75;
-  const bodyItems = items.filter((i) => !isFurigana(i));
+  // page furniture: pure digits sitting in the top/bottom 6% = page numbers
+  const itemTop = (i) => {
+    const tx = pdfjsLib.Util.transform(viewport.transform, i.transform);
+    return tx[5];
+  };
+  const isPageFurniture = (i) =>
+    /^[0-9\s.]+$/.test(i.str) &&
+    (itemTop(i) < viewport.height * 0.06 ||
+     itemTop(i) > viewport.height * 0.94);
+  const bodyItems = items.filter((i) => !isFurigana(i) && !isPageFurniture(i));
 
   for (const item of items) {
     const span = document.createElement("span");
@@ -69,24 +78,51 @@ async function renderPage(pdf, pageNum) {
     span.style.left = `${left}px`;
     span.style.top = `${top}px`;
     span.style.fontSize = `${fontHeight}px`;
+    // CRITICAL for band coloring: use the PDF's OWN embedded font. render()
+    // registers embedded fonts as web faces named after item.fontName
+    // (g_d0_f1 …). With matching metrics, colored glyphs overlay the canvas
+    // glyphs exactly — no offset "ghost copy" beside the real kanji.
+    if (item.fontName) span.style.fontFamily = item.fontName;
     if (angle) span.style.transform = `rotate(${angle}rad)`;
     if (isFurigana(item)) span.dataset.furigana = "1";
+    if (isPageFurniture(item)) span.dataset.furigana = "1"; // excluded from map
     textLayer.appendChild(span);
   }
 
-  // annotate this page's body text (furigana excluded) and band the spans
-  const pageText = bodyItems.map((i) => i.str).join("");
-  try {
-    const data = await annotateText(pageText);
-    if (data) applyBands(textLayer, bodyItems, data.tokens);
-  } catch (e) {
-    console.warn("moguru annotate failed", e);
+  // annotate this page's body text (furigana/page numbers excluded).
+  // Latin runs are joined WITH a space so foreign words don't glue
+  // (…etbeau + Le ciel…); Japanese joins directly (no spaces in JA prose).
+  // The offset map accumulates exactly what we join, so bands stay aligned.
+  const parts = [];
+  for (const i of bodyItems) {
+    const prev = parts[parts.length - 1];
+    if (
+      prev &&
+      /[A-Za-z0-9,.!?;:]$/.test(prev) &&
+      /^[A-Za-z0-9]/.test(i.str)
+    ) {
+      parts.push(" ");
+    }
+    parts.push(i.str);
+  }
+  const pageText = parts.join("");
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const data = await annotateText(pageText);
+      if (data) {
+        applyBands(textLayer, bodyItems, pageText, data.tokens);
+        break;
+      }
+    } catch (e) {
+      if (attempt === 1) console.warn("moguru annotate failed", e);
+    }
   }
 }
 
-// Map engine token offsets back onto textLayer spans. Offsets and the joined
-// text come from the same bodyItems list, so they align by construction.
-function applyBands(textLayer, items, tokens) {
+// Map engine token offsets back onto textLayer spans. spans/bodyItems/pageText
+// derive from the SAME join (including the injected Latin spaces), so token
+// char ranges align with spans by construction.
+function applyBands(textLayer, items, pageText, tokens) {
   const spans = [...textLayer.querySelectorAll("span")].filter(
     (s) => s.dataset.furigana !== "1"
   );
@@ -97,6 +133,8 @@ function applyBands(textLayer, items, tokens) {
     if (!span) break;
     spanRanges.push({ span, start: cursor, end: cursor + item.str.length });
     cursor += item.str.length;
+    // consume any space(s) injected between Latin runs before the next item
+    while (cursor < pageText.length && pageText[cursor] === " ") cursor += 1;
   }
   for (const tok of tokens) {
     if (!tok.band || tok.band === "plain" || tok.band === "known") continue;

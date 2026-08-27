@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Moguru Reader",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "潜る — see i+1 at a glance while you read. Color-coded difficulty for Japanese text, grounded in your local Moguru engine.",
   "permissions": ["contextMenus", "storage", "activeTab", "scripting"],
   "host_permissions": ["http://localhost/*", "http://127.0.0.1/*"],
