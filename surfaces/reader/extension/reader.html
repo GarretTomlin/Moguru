@@ -14,10 +14,11 @@
       border-radius: 6px; padding: 4px 10px; cursor: pointer; }
     #pages { max-width: 900px; margin: 0 auto; padding: 16px; }
     .page { background: white; margin: 0 auto 18px; position: relative;
-      box-shadow: 0 2px 12px rgba(0,0,0,.4); }
+      box-shadow: 0 2px 12px rgba(0,0,0,.4); isolation: isolate; }
     .page canvas { display: block; }
     .page .textLayer { position: absolute; inset: 0; overflow: hidden;
-      line-height: 1; text-align: initial; }
+      line-height: 1; text-align: initial; text-size-adjust: none;
+      forced-color-adjust: none; transform-origin: 0 0; }
     /* pdf.js text layer: transparent glyphs used only for selection. Banded
        spans get COLOR of their own — the text layer renders the colored
        glyphs precisely over the canvas ones (color the text, not a box). */
@@ -37,6 +38,29 @@
       border-bottom: 3px dotted var(--moguru-unstable-color);
     }
     .page .textLayer span[data-furigana] { pointer-events: none; }
+    /* Glyph tinting (official TextLayer only): banded runs are split into
+       per-token spans and the WHOLE layer is screen-blended over the canvas —
+       black × screen(color) = the color, white paper untouched, transparent
+       text a no-op. The burnt-in kanji itself takes the band color with zero
+       ghost copies. Layer-level blending (not per-span: pdf.js fit-transforms
+       spans, and transforms isolate). The font-substituted manual fallback
+       keeps the underlines above instead. */
+    .page .textLayer.tinted { mix-blend-mode: screen; }
+    /* selection paint inside a screen-blended layer: dark translucent shows
+       up as a light wash on paper (screen would erase pure highlight colors) */
+    .page .textLayer.tinted span::selection { background: rgba(0, 0, 0, 0.15); }
+    .page .textLayer.tinted span.moguru-tok { border-bottom: none; }
+    .page .textLayer.tinted span.moguru-iplus { color: var(--moguru-iplus-color); }
+    .page .textLayer.tinted span.moguru-new_hard { color: var(--moguru-hard-color); }
+    .page .textLayer.tinted span.moguru-known_unstable {
+      color: var(--moguru-unstable-color);
+    }
+    /* Alt+M band toggle (original view AND text view) */
+    .moguru-tok.moguru-bands-off {
+      border-bottom: none !important;
+      color: transparent !important;
+      mix-blend-mode: normal !important;
+    }
     .moguru-pop { position: fixed; }
     /* Text view: the page's own text re-typeset — colored glyphs are real
        DOM text here, so banding is pixel-perfect by construction. */
