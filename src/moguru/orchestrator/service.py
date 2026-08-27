@@ -19,9 +19,9 @@ Run: moguru serve   (default http://localhost:8766)
 
 from __future__ import annotations
 
-import asyncio
 import hashlib
 import json
+import re
 from typing import Any
 
 from starlette.applications import Starlette
@@ -34,8 +34,6 @@ from starlette.routing import Route
 from moguru.config import Config
 
 _config: Config | None = None
-_engine = None  # lazily mounted full Engine (for /ask)
-_engine_lock = asyncio.Lock()
 
 
 def config() -> Config:
@@ -43,20 +41,6 @@ def config() -> Config:
     if _config is None:
         _config = Config.load()
     return _config
-
-
-async def _get_engine():
-    """Mount the full engine (model + MCP servers + skills) on first /ask."""
-    global _engine
-    if _engine is None:
-        async with _engine_lock:
-            if _engine is None:
-                from moguru.orchestrator.agent import Engine
-
-                engine = Engine(config())
-                await engine.__aenter__()
-                _engine = engine
-    return _engine
 
 
 async def health(request: Request) -> JSONResponse:
@@ -203,23 +187,95 @@ async def assess(request: Request) -> JSONResponse:
     return JSONResponse(mining.assess_text(text, config()))
 
 
+def _ask_grounding(question: str, cfg: Config) -> str:
+    """Local dictionary entries for the 「…」-quoted word in the question.
+
+    The reader's explain popover asks about one word — SQLite answers that in
+    milliseconds, so the model never needs tools to fetch it.
+    """
+    m = re.search(r"「(.+?)」", question)
+    word = (m.group(1).strip() if m else "").strip()
+    if not word:
+        return ""
+    from moguru.mcp.dict_mcp import core as dict_core
+    from moguru.mcp.parser_mcp import core as parser_core
+
+    def clip(obj: Any, n: int = 1200) -> str:
+        s = json.dumps(obj, ensure_ascii=False)
+        return s if len(s) <= n else s[:n] + "…"
+
+    parts: list[str] = []
+    try:
+        toks = parser_core.tokenize(word, cfg)
+        lemma = toks[0]["lemma"] if toks and toks[0].get("lemma") else word
+    except Exception:
+        lemma = word
+    for query in dict.fromkeys([word, lemma]):  # dedupe, keep order
+        try:
+            entries = dict_core.lookup_word(query)[:2]
+            if entries:
+                parts.append(f"辞書エントリ({query}): {clip(entries)}")
+        except Exception:
+            pass
+    try:
+        pitch = dict_core.lookup_pitch(word) or dict_core.lookup_pitch(lemma)
+        if pitch:
+            parts.append(f"アクセント: {clip(pitch)}")
+    except Exception:
+        pass
+    for ch in word:
+        if not re.match(r"[\u4e00-\u9fff]", ch):  # kanji only
+            continue
+        try:
+            kanji = dict_core.lookup_kanji(ch)
+            if kanji:
+                parts.append(f"漢字情報({ch}): {clip(kanji, 800)}")
+        except Exception:
+            pass
+    return "\n".join(parts)
+
+
 async def ask(request: Request) -> JSONResponse:
     body = await request.json()
     question = (body or {}).get("question", "").strip()
     context = (body or {}).get("context", "").strip()
     if not question:
         return JSONResponse({"error": "question required"}, status_code=400)
-    engine = await _get_engine()
-    prompt = (
-        f"次の日本語の文脈について質問に答えてください。\n文脈: {context}\n質問: {question}"
-        if context
-        else question
+
+    # Plain no-tools completion grounded in local dictionary entries.
+    # (Routing /ask through the full agent loop shipped all ~40 MCP tool
+    # schemas with every explain — a 27B thinking model then burned minutes
+    # on prompt processing + tool-call rounds for lookups SQLite does in
+    # milliseconds. Tools stay for `moguru chat`, where they belong.)
+    from moguru.orchestrator.agent import ModelRouter
+
+    grounding = _ask_grounding(question, config())
+    system = (
+        "あなたは日本語学習支援アシスタントです。与えられた辞書情報だけを根拠に、"
+        "日本語で簡潔に答えてください。読み方・意味・アクセントを箇条書きで示し、"
+        "推論は短くしてください。"
     )
+    user = f"文脈: {context}\n質問: {question}" if context else question
+    if grounding:
+        user = f"{grounding}\n\n{user}"
+    router = ModelRouter(config())
+    messages: list[dict] = [
+        {"role": "system", "content": system},
+        {"role": "user", "content": user},
+    ]
     try:
-        answer = await engine.chat(prompt)
+        answer = ""
+        for _attempt in range(2):  # thinking models can emit an empty turn
+            response = router.chat(messages, max_tokens=700)
+            answer = (response["choices"][0]["message"].get("content") or "")
+            answer = answer.split("</think>")[-1].strip()
+            if answer:
+                break
+            messages.append({"role": "assistant", "content": ""})
+            messages.append({"role": "user", "content": "（続けてください。）"})
     except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=502)
-    return JSONResponse({"answer": answer})
+    return JSONResponse({"answer": answer, "grounded": bool(grounding)})
 
 
 def build_app(cfg: Config | None = None) -> Starlette:

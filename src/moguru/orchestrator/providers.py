@@ -401,10 +401,13 @@ class ProviderClient:
         self.headers = headers or {}
         self.timeout = timeout
 
-    def chat(self, messages: list[dict], tools: list[dict] | None = None) -> dict:
+    def chat(self, messages: list[dict], tools: list[dict] | None = None,
+             max_tokens: int | None = None) -> dict:
         body: dict[str, Any] = {"model": self.model, "messages": messages}
         if tools:
             body["tools"] = tools
+        if max_tokens:
+            body["max_tokens"] = max_tokens
         resp = requests.post(
             f"{self.endpoint}/chat/completions",
             headers=self.headers,

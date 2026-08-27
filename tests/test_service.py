@@ -116,6 +116,40 @@ def test_validation_errors(client):
     assert client.post("/assess", json={"text": " "}).status_code == 400
 
 
+def test_ask_no_tools_local_grounding(client, monkeypatch):
+    """Reader §3 explain: /ask grounds in LOCAL dictionary entries and ships
+    NO tool catalog — the 27B-thinking-model 2-minute explain fix."""
+    from moguru.orchestrator import agent
+
+    calls = []
+
+    class FakeRouter:
+        def __init__(self, cfg):
+            pass
+
+        def chat(self, messages, tools=None, max_tokens=None):
+            calls.append({"messages": messages, "tools": tools,
+                          "max_tokens": max_tokens})
+            return {"choices": [{"message": {"content": "構造 — こうぞう"}}]}
+
+    monkeypatch.setattr(agent, "ModelRouter", FakeRouter)
+    r = client.post("/ask", json={
+        "question": "この言葉「構造」の読み方・意味・アクセントを教えてください。",
+        "context": "「いき」の構造",
+    })
+    assert r.status_code == 200
+    data = r.json()
+    assert data["grounded"] is True
+    assert "構造" in data["answer"]
+    assert len(calls) == 1
+    assert calls[0]["tools"] is None       # no ~40-tool schema payload
+    assert calls[0]["max_tokens"] == 700   # bounded generation
+    # the SQLite grounding made it into the prompt (not the model's job)
+    prompt = calls[0]["messages"][1]["content"]
+    assert "辞書エントリ(構造)" in prompt
+    assert client.post("/ask", json={}).status_code == 400
+
+
 def test_signals_endpoint(client):
     r = client.post("/signals", json={"signals": [
         {"type": "hover", "key": "鱼", "sentence": "魚を見た。", "modality": "reading"},
